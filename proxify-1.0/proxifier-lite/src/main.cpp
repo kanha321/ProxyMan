@@ -239,11 +239,24 @@ static void RunSpeedTest(const Config& cfg) {
     WSACleanup();
 }
 
+static HANDLE CreateGlobalShutdownEvent() {
+    SECURITY_DESCRIPTOR sd;
+    InitializeSecurityDescriptor(&sd, SECURITY_DESCRIPTOR_REVISION);
+    SetSecurityDescriptorDacl(&sd, TRUE, NULL, FALSE);
+
+    SECURITY_ATTRIBUTES sa;
+    sa.nLength = sizeof(sa);
+    sa.lpSecurityDescriptor = &sd;
+    sa.bInheritHandle = FALSE;
+
+    return CreateEventW(&sa, TRUE, FALSE, L"Global\\ProxyManShutdownEvent");
+}
+
 int main(int argc, char* argv[]) {
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
 
-    // Check for --help or -h without requiring elevation first
+    // Check for --help, --version, or --stop without requiring elevation first
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "-h" || arg == "--help" || arg == "/?") {
@@ -251,6 +264,20 @@ int main(int argc, char* argv[]) {
             return 0;
         } else if (arg == "-v" || arg == "--version") {
             std::cout << "ProxyMan v1.0.0 (x64) - Network-Aware Transparent Proxy Engine for Windows\n";
+            return 0;
+        } else if (arg == "--stop") {
+            HANDLE hStopEvent = OpenEventW(EVENT_MODIFY_STATE, FALSE, L"Global\\ProxyManShutdownEvent");
+            if (hStopEvent != NULL) {
+                SetEvent(hStopEvent);
+                CloseHandle(hStopEvent);
+                ClearSystemProxy();
+                ShowNotificationToast("🛑 ProxyMan", "ProxyMan background engine stopped cleanly.");
+                std::cout << "\x1b[32m✔ Stop signal sent to active ProxyMan background instance.\x1b[0m\n";
+                std::cout << "\x1b[32m✔ System proxy settings restored.\x1b[0m\n";
+            } else {
+                ClearSystemProxy();
+                std::cout << "\x1b[33m[Main] No running ProxyMan instance found. Cleared system proxy.\x1b[0m\n";
+            }
             return 0;
         }
     }
@@ -287,21 +314,7 @@ int main(int argc, char* argv[]) {
     // Check command line flags for management & pool tools
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
-        if (arg == "--stop") {
-            HANDLE hStopEvent = OpenEventW(EVENT_MODIFY_STATE, FALSE, L"Local\\ProxyManShutdownEvent");
-            if (hStopEvent != NULL) {
-                SetEvent(hStopEvent);
-                CloseHandle(hStopEvent);
-                ClearSystemProxy();
-                ShowNotificationToast("🛑 ProxyMan", "ProxyMan background engine stopped cleanly.");
-                std::cout << "\x1b[32m✔ Stop signal sent to active ProxyMan background instance.\x1b[0m\n";
-                std::cout << "\x1b[32m✔ System proxy settings restored.\x1b[0m\n";
-            } else {
-                ClearSystemProxy();
-                std::cout << "\x1b[33m[Main] No running ProxyMan instance found. Cleared system proxy.\x1b[0m\n";
-            }
-            return 0;
-        } else if (arg == "--stats") {
+        if (arg == "--stats") {
             DataTracker::Instance().PrintSummaryReport();
             return 0;
         } else if (arg == "--install-startup") {
@@ -441,7 +454,7 @@ int main(int argc, char* argv[]) {
         }
     });
 
-    HANDLE hStopEvent = CreateEventW(NULL, TRUE, FALSE, L"Local\\ProxyManShutdownEvent");
+    HANDLE hStopEvent = CreateGlobalShutdownEvent();
 
     std::printf("\n[Main] ProxyMan is running. Press Ctrl+C or run 'ProxyMan --stop' to exit.\n\n");
 
