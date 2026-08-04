@@ -4,12 +4,15 @@
 #include "proxy_settings.h"
 #include "http_proxy_client.h"
 #include "data_tracker.h"
+#include "wifi_utils.h"
 
 #include <winsock2.h>
 #include <windows.h>
 #include <shellapi.h>
 #include <tlhelp32.h>
 #include <iostream>
+#include <fstream>
+#include <filesystem>
 #include <string>
 #include <atomic>
 #include <cstdlib>
@@ -20,6 +23,8 @@
 #pragma comment(lib, "iphlpapi.lib")
 #pragma comment(lib, "wininet.lib")
 #pragma comment(lib, "shell32.lib")
+
+namespace fs = std::filesystem;
 
 static std::atomic<bool> g_shutdownRequested{false};
 
@@ -81,6 +86,8 @@ static void PrintHelp() {
     std::cout << "\x1b[1;32mINFORMATIONAL & POOL COMMANDS:\x1b[0m\n";
     std::cout << "    \x1b[1;36m-h, --help\x1b[0m               Display this help & usage guide\n";
     std::cout << "    \x1b[1;36m-v, --version\x1b[0m            Display ProxyMan version details\n";
+    std::cout << "    \x1b[1;36m--status\x1b[0m                 Display ProxyMan engine & system proxy status\n";
+    std::cout << "    \x1b[1;36m--logs [-f]\x1b[0m              Tail connection logs (use -f to follow live stream)\n";
     std::cout << "    \x1b[1;36m--stop\x1b[0m                   Stop active background ProxyMan engine & restore system proxy\n";
     std::cout << "    \x1b[1;36m--stats\x1b[0m                  Display session data usage & application traffic summary\n";
     std::cout << "    \x1b[1;36m--speedtest\x1b[0m              Run MNNIT proxy speed & latency benchmark\n";
@@ -103,6 +110,90 @@ static void PrintHelp() {
     std::cout << "    172.31.103.29:3128   (Hostel Failover)\n";
     std::cout << "    172.31.100.14:3128   (EDC Failover)\n";
     std::cout << "===================================================================\n";
+}
+
+static void ShowStatus(const Config& cfg) {
+    HANDLE hMutex = OpenMutexW(MUTEX_ALL_ACCESS, FALSE, L"Global\\ProxyManSingletonMutex");
+    bool isRunning = (hMutex != NULL);
+    if (hMutex) CloseHandle(hMutex);
+
+    bool sysProxyEnabled = false;
+    std::string sysProxyAddr;
+    GetSystemProxy(sysProxyEnabled, sysProxyAddr);
+
+    LinkType link = GetActiveLinkType();
+    std::string linkStr = LinkTypeToString(link);
+    if (link == LinkType::WiFi) {
+        std::string ssid = GetActiveWifiSSID();
+        if (!ssid.empty()) linkStr += " (SSID: " + ssid + ")";
+    }
+
+    std::cout << "\n\x1b[1;36m===================================================================\x1b[0m\n";
+    std::cout << "\x1b[1;36m  ⚡ ProxyMan Engine & System Proxy Status\x1b[0m\n";
+    std::cout << "\x1b[1;36m===================================================================\x1b[0m\n";
+    std::cout << "Engine Status:       " << (isRunning ? "\x1b[1;32m✔ RUNNING (Active Daemon)\x1b[0m" : "\x1b[1;31m❌ STOPPED\x1b[0m") << "\n";
+    std::cout << "System Proxy:        " << (sysProxyEnabled ? ("\x1b[1;32m✔ ENABLED (" + sysProxyAddr + ")\x1b[0m") : "\x1b[1;31m❌ DISABLED (Direct)\x1b[0m") << "\n";
+    std::cout << "Configured Proxy:    \x1b[1;33m" << cfg.proxyIp << ":" << cfg.proxyPort << "\x1b[0m (user: " << cfg.proxyUser << ")\n";
+    std::cout << "Current Network:     \x1b[1;37m" << linkStr << "\x1b[0m\n";
+    std::cout << "Configuration File:  \x1b[1;33m" << GetDefaultConfigPath() << "\x1b[0m\n";
+    std::cout << "\x1b[1;36m===================================================================\x1b[0m\n\n";
+}
+
+static void ShowLogs(bool follow) {
+    const char* userProfile = std::getenv("USERPROFILE");
+    fs::path logPath;
+    if (userProfile) {
+        logPath = fs::path(userProfile) / ".config" / "proxyman" / "logs" / "proxyman.log";
+    } else {
+        logPath = "proxyman.log";
+    }
+
+    if (!fs::exists(logPath)) {
+        std::cout << "\x1b[33m[Logs] No connection log file found at: " << logPath.string() << "\x1b[0m\n";
+        return;
+    }
+
+    std::cout << "\n\x1b[1;36m===================================================================\x1b[0m\n";
+    std::cout << "\x1b[1;36m  ⚡ ProxyMan Connection Log History (" << logPath.string() << ")\x1b[0m\n";
+    std::cout << "\x1b[1;36m===================================================================\x1b[0m\n";
+
+    std::ifstream file(logPath);
+    if (!file.is_open()) {
+        std::cout << "[Logs] Failed to open log file.\n";
+        return;
+    }
+
+    std::vector<std::string> lines;
+    std::string line;
+    while (std::getline(file, line)) {
+        if (!line.empty()) lines.push_back(line);
+    }
+    file.close();
+
+    size_t startIdx = (lines.size() > 25) ? (lines.size() - 25) : 0;
+    for (size_t i = startIdx; i < lines.size(); ++i) {
+        std::cout << "\x1b[37m" << lines[i] << "\x1b[0m\n";
+    }
+
+    if (follow) {
+        std::cout << "\n\x1b[1;33m[Logs] Following live connection log stream... Press Ctrl+C to exit.\x1b[0m\n\n";
+        std::ifstream tailFile(logPath);
+        tailFile.seekg(0, std::ios::end);
+        while (true) {
+            std::string nline;
+            if (std::getline(tailFile, nline)) {
+                if (!nline.empty()) {
+                    std::cout << "\x1b[37m" << nline << "\x1b[0m\n";
+                }
+            } else {
+                tailFile.clear();
+                Sleep(200);
+            }
+        }
+    } else {
+        std::cout << "\x1b[1;36m===================================================================\x1b[0m\n";
+        std::cout << "Tip: Use \x1b[1;33mProxyMan --logs -f\x1b[0m to stream live connection logs.\n\n";
+    }
 }
 
 static bool InstallStartupTask() {
@@ -293,6 +384,14 @@ int main(int argc, char* argv[]) {
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
 
+    // Load config first for commands that require config context (e.g. --status)
+    Config cfg;
+    std::string defaultConfigPath = GetDefaultConfigPath();
+    bool loaded = LoadConfigFromFile(defaultConfigPath, cfg);
+    if (!loaded) {
+        LoadConfigFromFile("config.toml", cfg);
+    }
+
     // Check for CLI command flags first (no elevation or mutex needed for CLI info/management commands)
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
@@ -301,6 +400,13 @@ int main(int argc, char* argv[]) {
             return 0;
         } else if (arg == "-v" || arg == "--version") {
             std::cout << "ProxyMan v1.0.0 (x64) - Network-Aware Transparent Proxy Engine for Windows\n";
+            return 0;
+        } else if (arg == "--status") {
+            ShowStatus(cfg);
+            return 0;
+        } else if (arg == "--logs") {
+            bool follow = (i + 1 < argc && (std::string(argv[i + 1]) == "-f" || std::string(argv[i + 1]) == "--follow"));
+            ShowLogs(follow);
             return 0;
         } else if (arg == "--stop") {
             bool signaled = false;
@@ -337,23 +443,6 @@ int main(int argc, char* argv[]) {
         } else {
             std::cerr << "[Main] Elevation request failed or was cancelled by user. Exiting.\n";
             return 1;
-        }
-    }
-
-    // Load config
-    Config cfg;
-    std::string defaultConfigPath = GetDefaultConfigPath();
-    bool loaded = false;
-
-    if (argc > 1 && argv[1][0] != '-') {
-        loaded = LoadConfigFromFile(argv[1], cfg);
-    } else {
-        loaded = LoadConfigFromFile(defaultConfigPath, cfg);
-        if (!loaded) {
-            loaded = LoadConfigFromFile("config.toml", cfg);
-            if (!loaded) {
-                loaded = LoadConfigFromFile("proxy-config.txt", cfg);
-            }
         }
     }
 
