@@ -12,6 +12,7 @@
 #include <atomic>
 #include <cstdlib>
 #include <vector>
+#include <algorithm>
 
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "iphlpapi.lib")
@@ -78,6 +79,7 @@ static void PrintHelp() {
     std::cout << "\x1b[1;32mINFORMATIONAL & POOL COMMANDS:\x1b[0m\n";
     std::cout << "    \x1b[1;36m-h, --help\x1b[0m               Display this help & usage guide\n";
     std::cout << "    \x1b[1;36m-v, --version\x1b[0m            Display ProxyMan version details\n";
+    std::cout << "    \x1b[1;36m--speedtest\x1b[0m              Run MNNIT proxy speed & latency benchmark\n";
     std::cout << "    \x1b[1;36m--check-proxies\x1b[0m          Test health & latency across MNNIT proxy pool\n";
     std::cout << "    \x1b[1;36m--set-user <u0> <p0>\x1b[0m     Update proxy credentials in config\n\n";
 
@@ -168,21 +170,25 @@ static bool UninstallWindowsService() {
     }
 }
 
-static void CheckProxyPoolHealth(const Config& cfg) {
+static void RunSpeedTest(const Config& cfg) {
     WSADATA wsaData;
     if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
-        std::cerr << "[ProxyCheck] WSAStartup failed." << std::endl;
+        std::cerr << "[SpeedTest] WSAStartup failed." << std::endl;
         return;
     }
 
-    std::cout << "\n\x1b[1;36m==========================================================\x1b[0m\n";
-    std::cout << "\x1b[1;36m  ⚡ ProxyMan MNNIT Proxy Pool Health & Latency Test      \x1b[0m\n";
-    std::cout << "\x1b[1;36m==========================================================\x1b[0m\n";
-    std::cout << "Testing credentials: user=\x1b[1;33m" << cfg.proxyUser << "\x1b[0m\n\n";
+    std::cout << "\n\x1b[1;36m===================================================================\x1b[0m\n";
+    std::cout << "\x1b[1;36m  ⚡ ProxyMan MNNIT Speedtest & Latency Leaderboard                \x1b[0m\n";
+    std::cout << "\x1b[1;36m===================================================================\x1b[0m\n";
+    std::cout << "Testing pool with credentials: user=\x1b[1;33m" << cfg.proxyUser << "\x1b[0m\n\n";
 
-    long minLatency = 999999;
-    std::string bestProxyIp = cfg.proxyIp;
-    uint16_t bestProxyPort = cfg.proxyPort;
+    struct TestEntry {
+        std::string ip;
+        uint16_t port;
+        bool isHealthy;
+        long latencyMs;
+    };
+    std::vector<TestEntry> results;
 
     for (const auto& proxyEntry : cfg.proxyPool) {
         std::string ip = proxyEntry;
@@ -194,28 +200,38 @@ static void CheckProxyPoolHealth(const Config& cfg) {
         }
 
         std::cout << "  Testing " << ip << ":" << port << " ... ";
-        ProxyHealthResult res = TestProxyHealth(ip, port, cfg.proxyUser, cfg.proxyPass, 3000);
+        std::cout.flush();
+
+        ProxyHealthResult res = TestProxyHealth(ip, port, cfg.proxyUser, cfg.proxyPass, 2000);
+        TestEntry entry{ip, port, res.isHealthy, res.latencyMs};
+        results.push_back(entry);
 
         if (res.isHealthy) {
             std::cout << "\x1b[32m✔ ONLINE\x1b[0m (" << res.latencyMs << " ms)\n";
-            if (res.latencyMs < minLatency) {
-                minLatency = res.latencyMs;
-                bestProxyIp = ip;
-                bestProxyPort = port;
-            }
         } else {
-            std::cout << "\x1b[31m❌ OFFLINE / UNREACHABLE\x1b[0m\n";
+            std::cout << "\x1b[31m❌ OFFLINE\x1b[0m\n";
         }
     }
 
-    std::cout << "\n----------------------------------------------------------\n";
-    if (minLatency < 999999) {
-        std::cout << "\x1b[1;32mOptimal Active Proxy:\x1b[0m " << bestProxyIp << ":" << bestProxyPort
-                  << " (" << minLatency << " ms)\n";
-    } else {
-        std::cout << "\x1b[1;31mWarning: All proxy servers in pool are currently unreachable.\x1b[0m\n";
+    std::sort(results.begin(), results.end(), [](const TestEntry& a, const TestEntry& b) {
+        if (a.isHealthy != b.isHealthy) return a.isHealthy > b.isHealthy;
+        return a.latencyMs < b.latencyMs;
+    });
+
+    std::cout << "\n\x1b[1;32mLEADERBOARD:\x1b[0m\n";
+    int rank = 1;
+    for (const auto& r : results) {
+        std::cout << "  Rank " << rank++ << ": " << r.ip << ":" << r.port << "  ";
+        if (r.isHealthy) {
+            std::cout << "\x1b[32m✔ ONLINE\x1b[0m  (" << r.latencyMs << " ms)";
+            if (rank == 2) std::cout << " \x1b[1;33m[FASTEST 🚀]\x1b[0m";
+        } else {
+            std::cout << "\x1b[31m❌ OFFLINE\x1b[0m";
+        }
+        std::cout << "\n";
     }
-    std::cout << "==========================================================\n\n";
+
+    std::cout << "\x1b[1;36m===================================================================\x1b[0m\n\n";
 
     WSACleanup();
 }
@@ -280,8 +296,8 @@ int main(int argc, char* argv[]) {
         } else if (arg == "--uninstall-service") {
             UninstallWindowsService();
             return 0;
-        } else if (arg == "--check-proxies") {
-            CheckProxyPoolHealth(cfg);
+        } else if (arg == "--check-proxies" || arg == "--speedtest") {
+            RunSpeedTest(cfg);
             return 0;
         } else if (arg == "--set-user" && i + 2 < argc) {
             cfg.proxyUser = argv[i + 1];
