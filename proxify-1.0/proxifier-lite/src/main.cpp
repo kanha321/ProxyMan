@@ -8,6 +8,7 @@
 #include <winsock2.h>
 #include <windows.h>
 #include <shellapi.h>
+#include <tlhelp32.h>
 #include <iostream>
 #include <string>
 #include <atomic>
@@ -252,6 +253,42 @@ static HANDLE CreateGlobalShutdownEvent() {
     return CreateEventW(&sa, TRUE, FALSE, L"Global\\ProxyManShutdownEvent");
 }
 
+static HANDLE CreateGlobalMutex() {
+    SECURITY_DESCRIPTOR sd;
+    InitializeSecurityDescriptor(&sd, SECURITY_DESCRIPTOR_REVISION);
+    SetSecurityDescriptorDacl(&sd, TRUE, NULL, FALSE);
+
+    SECURITY_ATTRIBUTES sa;
+    sa.nLength = sizeof(sa);
+    sa.lpSecurityDescriptor = &sd;
+    sa.bInheritHandle = FALSE;
+
+    return CreateMutexW(&sa, FALSE, L"Global\\ProxyManSingletonMutex");
+}
+
+static bool KillRunningProxyManProcesses() {
+    DWORD currentPid = GetCurrentProcessId();
+    bool killedAny = false;
+    HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (hSnap == INVALID_HANDLE_VALUE) return false;
+
+    PROCESSENTRY32W pe = { sizeof(pe) };
+    if (Process32FirstW(hSnap, &pe)) {
+        do {
+            if (_wcsicmp(pe.szExeFile, L"ProxyMan.exe") == 0 && pe.th32ProcessID != currentPid) {
+                HANDLE hProc = OpenProcess(PROCESS_TERMINATE, FALSE, pe.th32ProcessID);
+                if (hProc) {
+                    TerminateProcess(hProc, 0);
+                    CloseHandle(hProc);
+                    killedAny = true;
+                }
+            }
+        } while (Process32NextW(hSnap, &pe));
+    }
+    CloseHandle(hSnap);
+    return killedAny;
+}
+
 int main(int argc, char* argv[]) {
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
@@ -266,16 +303,22 @@ int main(int argc, char* argv[]) {
             std::cout << "ProxyMan v1.0.0 (x64) - Network-Aware Transparent Proxy Engine for Windows\n";
             return 0;
         } else if (arg == "--stop") {
+            bool signaled = false;
             HANDLE hStopEvent = OpenEventW(EVENT_MODIFY_STATE, FALSE, L"Global\\ProxyManShutdownEvent");
             if (hStopEvent != NULL) {
                 SetEvent(hStopEvent);
                 CloseHandle(hStopEvent);
-                ClearSystemProxy();
-                ShowNotificationToast("🛑 ProxyMan", "ProxyMan background engine stopped cleanly.");
+                signaled = true;
+            }
+
+            bool killed = KillRunningProxyManProcesses();
+            ClearSystemProxy();
+            ShowNotificationToast("🛑 ProxyMan", "ProxyMan background engine stopped cleanly.");
+
+            if (signaled || killed) {
                 std::cout << "\x1b[32m✔ Stop signal sent to active ProxyMan background instance.\x1b[0m\n";
                 std::cout << "\x1b[32m✔ System proxy settings restored.\x1b[0m\n";
             } else {
-                ClearSystemProxy();
                 std::cout << "\x1b[33m[Main] No running ProxyMan instance found. Cleared system proxy.\x1b[0m\n";
             }
             return 0;
@@ -342,7 +385,7 @@ int main(int argc, char* argv[]) {
     }
 
     // Ensure Singleton Instance: ONLY enforced when launching the proxy engine daemon
-    HANDLE hMutex = CreateMutexW(NULL, FALSE, L"Local\\ProxyManSingletonMutex");
+    HANDLE hMutex = CreateGlobalMutex();
     if (hMutex == NULL || GetLastError() == ERROR_ALREADY_EXISTS) {
         std::cerr << "[Main] Another instance of ProxyMan is already running. Exiting.\n";
         if (hMutex != NULL) CloseHandle(hMutex);
