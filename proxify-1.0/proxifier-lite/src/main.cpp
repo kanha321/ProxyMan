@@ -79,6 +79,7 @@ static void PrintHelp() {
     std::cout << "\x1b[1;32mINFORMATIONAL & POOL COMMANDS:\x1b[0m\n";
     std::cout << "    \x1b[1;36m-h, --help\x1b[0m               Display this help & usage guide\n";
     std::cout << "    \x1b[1;36m-v, --version\x1b[0m            Display ProxyMan version details\n";
+    std::cout << "    \x1b[1;36m--stop\x1b[0m                   Stop active background ProxyMan engine & restore system proxy\n";
     std::cout << "    \x1b[1;36m--speedtest\x1b[0m              Run MNNIT proxy speed & latency benchmark\n";
     std::cout << "    \x1b[1;36m--check-proxies\x1b[0m          Test health & latency across MNNIT proxy pool\n";
     std::cout << "    \x1b[1;36m--set-user <u0> <p0>\x1b[0m     Update proxy credentials in config\n\n";
@@ -284,7 +285,21 @@ int main(int argc, char* argv[]) {
     // Check command line flags for management & pool tools
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
-        if (arg == "--install-startup") {
+        if (arg == "--stop") {
+            HANDLE hStopEvent = OpenEventW(EVENT_MODIFY_STATE, FALSE, L"Local\\ProxyManShutdownEvent");
+            if (hStopEvent != NULL) {
+                SetEvent(hStopEvent);
+                CloseHandle(hStopEvent);
+                ClearSystemProxy();
+                ShowNotificationToast("🛑 ProxyMan", "ProxyMan background engine stopped cleanly.");
+                std::cout << "\x1b[32m✔ Stop signal sent to active ProxyMan background instance.\x1b[0m\n";
+                std::cout << "\x1b[32m✔ System proxy settings restored.\x1b[0m\n";
+            } else {
+                ClearSystemProxy();
+                std::cout << "\x1b[33m[Main] No running ProxyMan instance found. Cleared system proxy.\x1b[0m\n";
+            }
+            return 0;
+        } else if (arg == "--install-startup") {
             InstallStartupTask();
             return 0;
         } else if (arg == "--uninstall-startup") {
@@ -421,12 +436,19 @@ int main(int argc, char* argv[]) {
         }
     });
 
-    std::printf("\n[Main] ProxyMan is running. Press Ctrl+C to exit.\n\n");
+    HANDLE hStopEvent = CreateEventW(NULL, TRUE, FALSE, L"Local\\ProxyManShutdownEvent");
 
-    // Block until shutdown signal
+    std::printf("\n[Main] ProxyMan is running. Press Ctrl+C or run 'ProxyMan --stop' to exit.\n\n");
+
+    // Block until shutdown signal or cross-process --stop event
     while (!g_shutdownRequested.load()) {
-        Sleep(200);
+        if (hStopEvent != NULL && WaitForSingleObject(hStopEvent, 200) == WAIT_OBJECT_0) {
+            std::printf("\n[Main] Received cross-process stop signal (--stop)...\n");
+            break;
+        }
     }
+
+    if (hStopEvent != NULL) CloseHandle(hStopEvent);
 
     // Clean shutdown
     std::printf("[Main] Shutting down...\n");
