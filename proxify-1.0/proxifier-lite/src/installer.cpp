@@ -36,20 +36,6 @@ static bool IsElevated() {
     return isElevated != FALSE;
 }
 
-static bool Is64BitOS() {
-#if defined(_WIN64)
-    return true;
-#else
-    BOOL isWow64 = FALSE;
-    typedef BOOL(WINAPI* LPFN_ISWOW64PROCESS)(HANDLE, PBOOL);
-    auto fnIsWow64Process = (LPFN_ISWOW64PROCESS)GetProcAddress(GetModuleHandleA("kernel32"), "IsWow64Process");
-    if (fnIsWow64Process) {
-        fnIsWow64Process(GetCurrentProcess(), &isWow64);
-    }
-    return isWow64 != FALSE;
-#endif
-}
-
 static bool RelaunchElevated(int argc, char* argv[]) {
     wchar_t exePath[MAX_PATH];
     if (GetModuleFileNameW(NULL, exePath, MAX_PATH) == 0) return false;
@@ -142,7 +128,7 @@ static bool ExtractEmbeddedFile(int resourceId, const fs::path& outputPath) {
 static void DrawHeader() {
     std::cout << "\x1b[1;36m";
     std::cout << "┌─────────────────────────────────────────────────────────────┐\n";
-    std::cout << "│  ⚡  ProxyMan Universal Setup & Installation Wizard          │\n";
+    std::cout << "│  ⚡  ProxyMan Self-Contained Setup & Installation Wizard    │\n";
     std::cout << "└─────────────────────────────────────────────────────────────┘\n";
     std::cout << "\x1b[0m";
     std::cout << "\x1b[1;33m  💡 Tip:\x1b[0m Press \x1b[1;36m[ENTER]\x1b[0m to keep default settings for all steps.\n";
@@ -233,9 +219,6 @@ int main(int argc, char* argv[]) {
 
     // Extract Embedded Binaries from Installer EXE into Target Install Directory
     std::cout << "\x1b[1;32m[Extracting Embedded Binaries]\x1b[0m\n";
-    bool is64 = Is64BitOS();
-    std::cout << "  Detected OS Architecture: " << (is64 ? "\x1b[1;36m64-bit (x64)\x1b[0m" : "\x1b[1;36m32-bit (x86)\x1b[0m") << "\n";
-
     struct EmbeddedFile {
         int id;
         std::string filename;
@@ -243,7 +226,7 @@ int main(int argc, char* argv[]) {
     const std::vector<EmbeddedFile> embeddedFiles = {
         { IDR_PROXYMAN_EXE,  "ProxyMan.exe" },
         { IDR_WINDIVERT_DLL, "WinDivert.dll" },
-        { is64 ? IDR_WINDIVERT64_SYS : IDR_WINDIVERT32_SYS, is64 ? "WinDivert64.sys" : "WinDivert32.sys" }
+        { IDR_WINDIVERT_SYS, "WinDivert64.sys" }
     };
 
     for (const auto& ef : embeddedFiles) {
