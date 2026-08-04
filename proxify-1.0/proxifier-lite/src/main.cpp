@@ -87,8 +87,8 @@ static void PrintHelp() {
     std::cout << "    \x1b[1;36m--install-service\x1b[0m        Install Windows System Service (Starts at Boot)\n";
     std::cout << "    \x1b[1;36m--uninstall-service\x1b[0m      Remove Windows System Service\n\n";
 
-    std::cout << "\x1b[1;32mCONFIGURATION FILE:\x1b[0m\n";
-    std::cout << "    Default Path: \x1b[1;33m%USERPROFILE%\\.config\\proxyman\\config.txt\x1b[0m\n\n";
+    std::cout << "\x1b[1;32mCONFIGURATION FILE (TOML):\x1b[0m\n";
+    std::cout << "    Default Path: \x1b[1;33m%USERPROFILE%\\.config\\proxyman\\config.toml\x1b[0m\n\n";
 
     std::cout << "\x1b[1;32mMNNIT DEFAULT PROXY POOL:\x1b[0m\n";
     std::cout << "    172.31.100.25:3128   (Primary Gateway)\n";
@@ -258,7 +258,10 @@ int main(int argc, char* argv[]) {
     } else {
         loaded = LoadConfigFromFile(defaultConfigPath, cfg);
         if (!loaded) {
-            loaded = LoadConfigFromFile("proxy-config.txt", cfg);
+            loaded = LoadConfigFromFile("config.toml", cfg);
+            if (!loaded) {
+                loaded = LoadConfigFromFile("proxy-config.txt", cfg);
+            }
         }
     }
 

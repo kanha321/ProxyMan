@@ -15,6 +15,17 @@ static std::string Trim(const std::string& s) {
     return s.substr(start, end - start + 1);
 }
 
+static std::string StripQuotes(const std::string& s) {
+    std::string str = Trim(s);
+    if (str.size() >= 2 && str.front() == '"' && str.back() == '"') {
+        return str.substr(1, str.size() - 2);
+    }
+    if (str.size() >= 2 && str.front() == '\'' && str.back() == '\'') {
+        return str.substr(1, str.size() - 2);
+    }
+    return str;
+}
+
 static std::vector<std::string> GetDefaultProxyPool() {
     return {
         "172.31.100.25:3128",
@@ -22,6 +33,16 @@ static std::vector<std::string> GetDefaultProxyPool() {
         "172.31.102.29:3128",
         "172.31.103.29:3128",
         "172.31.100.14:3128"
+    };
+}
+
+static std::vector<std::string> GetDefaultBypassList() {
+    return {
+        "172.31.*",
+        "10.*",
+        "127.*",
+        "localhost",
+        "mnnit.ac.in"
     };
 }
 
@@ -33,10 +54,29 @@ std::string GetDefaultConfigPath() {
         fs::path p(userProfile);
         p /= ".config";
         p /= "proxyman";
-        p /= "config.txt";
+        p /= "config.toml";
         return p.string();
     }
-    return "proxy-config.txt";
+    return "config.toml";
+}
+
+static std::vector<std::string> ParseTomlArray(const std::string& arrayStr) {
+    std::vector<std::string> result;
+    auto start = arrayStr.find('[');
+    auto end = arrayStr.rfind(']');
+    if (start == std::string::npos || end == std::string::npos || end <= start) {
+        return result;
+    }
+    std::string content = arrayStr.substr(start + 1, end - start - 1);
+    std::stringstream ss(content);
+    std::string token;
+    while (std::getline(ss, token, ',')) {
+        std::string cleaned = StripQuotes(token);
+        if (!cleaned.empty()) {
+            result.push_back(cleaned);
+        }
+    }
+    return result;
 }
 
 bool LoadConfigFromFile(const std::string& path, Config& config) {
@@ -46,10 +86,33 @@ bool LoadConfigFromFile(const std::string& path, Config& config) {
     }
 
     config.proxyPool.clear();
+    config.bypassList.clear();
+
+    std::string currentSection;
     std::string line;
+    std::string multiLineBuffer;
+    bool inMultiLineArray = false;
+    std::string multiLineKey;
+
     while (std::getline(file, line)) {
         line = Trim(line);
         if (line.empty() || line[0] == '#') continue;
+
+        if (inMultiLineArray) {
+            multiLineBuffer += " " + line;
+            if (line.find(']') != std::string::npos) {
+                inMultiLineArray = false;
+                auto items = ParseTomlArray(multiLineBuffer);
+                if (multiLineKey == "proxy_pool") config.proxyPool = items;
+                else if (multiLineKey == "bypass_list") config.bypassList = items;
+            }
+            continue;
+        }
+
+        if (line.front() == '[' && line.back() == ']') {
+            currentSection = Trim(line.substr(1, line.size() - 2));
+            continue;
+        }
 
         auto pos = line.find('=');
         if (pos == std::string::npos) continue;
@@ -57,29 +120,38 @@ bool LoadConfigFromFile(const std::string& path, Config& config) {
         std::string key = Trim(line.substr(0, pos));
         std::string val = Trim(line.substr(pos + 1));
 
-        if (key == "proxy_ip") {
-            config.proxyIp = val;
-        } else if (key == "proxy_port") {
-            try { config.proxyPort = static_cast<uint16_t>(std::stoi(val)); } catch (...) {}
-        } else if (key == "proxy_user") {
-            config.proxyUser = val;
-        } else if (key == "proxy_pass") {
-            config.proxyPass = val;
-        } else if (key == "relay_port") {
-            try { config.relayPort = static_cast<uint16_t>(std::stoi(val)); } catch (...) {}
-        } else if (key == "proxy_pool") {
-            std::stringstream ss(val);
-            std::string item;
-            while (std::getline(ss, item, ',')) {
-                item = Trim(item);
-                if (!item.empty()) config.proxyPool.push_back(item);
-            }
+        if (val.front() == '[' && val.back() != ']') {
+            inMultiLineArray = true;
+            multiLineKey = key;
+            multiLineBuffer = val;
+            continue;
+        }
+
+        if (val.front() == '[' && val.back() == ']') {
+            auto items = ParseTomlArray(val);
+            if (key == "proxy_pool") config.proxyPool = items;
+            else if (key == "bypass_list") config.bypassList = items;
+            continue;
+        }
+
+        std::string cleanVal = StripQuotes(val);
+
+        if (currentSection == "proxy") {
+            if (key == "ip") config.proxyIp = cleanVal;
+            else if (key == "port") { try { config.proxyPort = static_cast<uint16_t>(std::stoi(cleanVal)); } catch (...) {} }
+            else if (key == "user" || key == "username") config.proxyUser = cleanVal;
+            else if (key == "pass" || key == "password") config.proxyPass = cleanVal;
+        } else {
+            if (key == "proxy_ip") config.proxyIp = cleanVal;
+            else if (key == "proxy_port") { try { config.proxyPort = static_cast<uint16_t>(std::stoi(cleanVal)); } catch (...) {} }
+            else if (key == "proxy_user") config.proxyUser = cleanVal;
+            else if (key == "proxy_pass") config.proxyPass = cleanVal;
+            else if (key == "relay_port") { try { config.relayPort = static_cast<uint16_t>(std::stoi(cleanVal)); } catch (...) {} }
         }
     }
 
-    if (config.proxyPool.empty()) {
-        config.proxyPool = GetDefaultProxyPool();
-    }
+    if (config.proxyPool.empty()) config.proxyPool = GetDefaultProxyPool();
+    if (config.bypassList.empty()) config.bypassList = GetDefaultBypassList();
 
     return !config.proxyIp.empty();
 }
@@ -94,21 +166,28 @@ bool SaveConfigToFile(const std::string& path, Config& config) {
         std::ofstream file(path);
         if (!file.is_open()) return false;
 
-        file << "# ProxyMan Configuration File\n";
-        file << "proxy_ip=" << config.proxyIp << "\n";
-        file << "proxy_port=" << config.proxyPort << "\n";
-        file << "proxy_user=" << config.proxyUser << "\n";
-        file << "proxy_pass=" << config.proxyPass << "\n";
-        file << "relay_port=" << config.relayPort << "\n";
+        file << "# ProxyMan TOML Configuration File\n\n";
+        file << "relay_port = " << config.relayPort << "\n\n";
+        file << "[proxy]\n";
+        file << "ip = \"" << config.proxyIp << "\"\n";
+        file << "port = " << config.proxyPort << "\n";
+        file << "user = \"" << config.proxyUser << "\"\n";
+        file << "pass = \"" << config.proxyPass << "\"\n\n";
 
-        if (!config.proxyPool.empty()) {
-            file << "proxy_pool=";
-            for (size_t i = 0; i < config.proxyPool.size(); ++i) {
-                if (i > 0) file << ",";
-                file << config.proxyPool[i];
-            }
-            file << "\n";
+        file << "proxy_pool = [\n";
+        if (config.proxyPool.empty()) config.proxyPool = GetDefaultProxyPool();
+        for (size_t i = 0; i < config.proxyPool.size(); ++i) {
+            file << "    \"" << config.proxyPool[i] << "\"" << (i + 1 < config.proxyPool.size() ? "," : "") << "\n";
         }
+        file << "]\n\n";
+
+        file << "bypass_list = [\n";
+        if (config.bypassList.empty()) config.bypassList = GetDefaultBypassList();
+        for (size_t i = 0; i < config.bypassList.size(); ++i) {
+            file << "    \"" << config.bypassList[i] << "\"" << (i + 1 < config.bypassList.size() ? "," : "") << "\n";
+        }
+        file << "]\n";
+
         return true;
     } catch (const std::exception& e) {
         std::cerr << "[Config] Failed to save config to " << path << ": " << e.what() << std::endl;
@@ -118,7 +197,7 @@ bool SaveConfigToFile(const std::string& path, Config& config) {
 
 bool PromptAndSaveConfig(const std::string& path, Config& config) {
     std::cout << "==========================================================\n";
-    std::cout << "  ProxyMan First-Time Configuration Setup\n";
+    std::cout << "  ProxyMan First-Time TOML Configuration Setup\n";
     std::cout << "==========================================================\n";
     std::cout << "No configuration found at: " << path << "\n\n";
 
@@ -163,10 +242,11 @@ bool PromptAndSaveConfig(const std::string& path, Config& config) {
     }
 
     config.proxyPool = GetDefaultProxyPool();
+    config.bypassList = GetDefaultBypassList();
 
-    std::cout << "\n[Config] Saving configuration to: " << path << std::endl;
+    std::cout << "\n[Config] Saving TOML configuration to: " << path << std::endl;
     if (SaveConfigToFile(path, config)) {
-        std::cout << "[Config] Configuration saved successfully!\n\n";
+        std::cout << "[Config] TOML Configuration saved successfully!\n\n";
         return true;
     } else {
         std::cerr << "[Config] Failed to save configuration file.\n\n";

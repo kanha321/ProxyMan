@@ -198,22 +198,37 @@ int main(int argc, char* argv[]) {
     std::getline(std::cin, input);
     if (!Trim(input).empty()) { try { relayPort = static_cast<uint16_t>(std::stoi(input)); } catch (...) {} }
 
-    // Write Config file to ~/.config/proxyman/config.txt
+    // Write Config file to ~/.config/proxyman/config.toml
     const char* userProfile = std::getenv("USERPROFILE");
     if (userProfile) {
         fs::path configDir = fs::path(userProfile) / ".config" / "proxyman";
         fs::create_directories(configDir);
-        fs::path configFile = configDir / "config.txt";
+        fs::path configFile = configDir / "config.toml";
 
         std::ofstream cfgFile(configFile);
         if (cfgFile.is_open()) {
-            cfgFile << "# ProxyMan Configuration File\n";
-            cfgFile << "proxy_ip=" << proxyIp << "\n";
-            cfgFile << "proxy_port=" << proxyPort << "\n";
-            cfgFile << "proxy_user=" << proxyUser << "\n";
-            cfgFile << "proxy_pass=" << proxyPass << "\n";
-            cfgFile << "relay_port=" << relayPort << "\n";
-            std::cout << "\x1b[32m✔ Configuration saved to: " << configFile.string() << "\x1b[0m\n\n";
+            cfgFile << "# ProxyMan TOML Configuration File\n\n";
+            cfgFile << "relay_port = " << relayPort << "\n\n";
+            cfgFile << "[proxy]\n";
+            cfgFile << "ip = \"" << proxyIp << "\"\n";
+            cfgFile << "port = " << proxyPort << "\n";
+            cfgFile << "user = \"" << proxyUser << "\"\n";
+            cfgFile << "pass = \"" << proxyPass << "\"\n\n";
+            cfgFile << "proxy_pool = [\n";
+            cfgFile << "    \"172.31.100.25:3128\",\n";
+            cfgFile << "    \"172.31.100.27:3128\",\n";
+            cfgFile << "    \"172.31.102.29:3128\",\n";
+            cfgFile << "    \"172.31.103.29:3128\",\n";
+            cfgFile << "    \"172.31.100.14:3128\"\n";
+            cfgFile << "]\n\n";
+            cfgFile << "bypass_list = [\n";
+            cfgFile << "    \"172.31.*\",\n";
+            cfgFile << "    \"10.*\",\n";
+            cfgFile << "    \"127.*\",\n";
+            cfgFile << "    \"localhost\",\n";
+            cfgFile << "    \"mnnit.ac.in\"\n";
+            cfgFile << "]\n";
+            std::cout << "\x1b[32m✔ TOML Configuration saved to: " << configFile.string() << "\x1b[0m\n\n";
         }
     }
 
