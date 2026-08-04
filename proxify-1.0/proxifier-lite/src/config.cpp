@@ -136,16 +136,16 @@ bool LoadConfigFromFile(const std::string& path, Config& config) {
 
         std::string cleanVal = StripQuotes(val);
 
-        if (currentSection == "proxy") {
-            if (key == "ip") config.proxyIp = cleanVal;
-            else if (key == "port") { try { config.proxyPort = static_cast<uint16_t>(std::stoi(cleanVal)); } catch (...) {} }
-            else if (key == "user" || key == "username") config.proxyUser = cleanVal;
+        if (currentSection == "proxy" || currentSection == "auth") {
+            if (key == "user" || key == "username") config.proxyUser = cleanVal;
             else if (key == "pass" || key == "password") config.proxyPass = cleanVal;
+            else if (key == "ip") config.proxyIp = cleanVal;
+            else if (key == "port") { try { config.proxyPort = static_cast<uint16_t>(std::stoi(cleanVal)); } catch (...) {} }
         } else {
-            if (key == "proxy_ip") config.proxyIp = cleanVal;
+            if (key == "proxy_user" || key == "user") config.proxyUser = cleanVal;
+            else if (key == "proxy_pass" || key == "pass") config.proxyPass = cleanVal;
+            else if (key == "proxy_ip") config.proxyIp = cleanVal;
             else if (key == "proxy_port") { try { config.proxyPort = static_cast<uint16_t>(std::stoi(cleanVal)); } catch (...) {} }
-            else if (key == "proxy_user") config.proxyUser = cleanVal;
-            else if (key == "proxy_pass") config.proxyPass = cleanVal;
             else if (key == "relay_port") { try { config.relayPort = static_cast<uint16_t>(std::stoi(cleanVal)); } catch (...) {} }
         }
     }
@@ -153,7 +153,20 @@ bool LoadConfigFromFile(const std::string& path, Config& config) {
     if (config.proxyPool.empty()) config.proxyPool = GetDefaultProxyPool();
     if (config.bypassList.empty()) config.bypassList = GetDefaultBypassList();
 
-    return !config.proxyIp.empty();
+    // Default active proxyIp/proxyPort to first item in pool if not explicitly set
+    if (config.proxyIp.empty() && !config.proxyPool.empty()) {
+        std::string first = config.proxyPool[0];
+        auto ppos = first.find(':');
+        if (ppos != std::string::npos) {
+            config.proxyIp = first.substr(0, ppos);
+            try { config.proxyPort = static_cast<uint16_t>(std::stoi(first.substr(ppos + 1))); } catch (...) { config.proxyPort = 3128; }
+        } else {
+            config.proxyIp = first;
+            config.proxyPort = 3128;
+        }
+    }
+
+    return true;
 }
 
 bool SaveConfigToFile(const std::string& path, Config& config) {
@@ -168,9 +181,7 @@ bool SaveConfigToFile(const std::string& path, Config& config) {
 
         file << "# ProxyMan TOML Configuration File\n\n";
         file << "relay_port = " << config.relayPort << "\n\n";
-        file << "[proxy]\n";
-        file << "ip = \"" << config.proxyIp << "\"\n";
-        file << "port = " << config.proxyPort << "\n";
+        file << "[auth]\n";
         file << "user = \"" << config.proxyUser << "\"\n";
         file << "pass = \"" << config.proxyPass << "\"\n\n";
 
@@ -201,8 +212,6 @@ bool PromptAndSaveConfig(const std::string& path, Config& config) {
     std::cout << "==========================================================\n";
     std::cout << "[Config] No TOML configuration file found at: " << path << "\n";
 
-    config.proxyIp = "172.31.100.25";
-    config.proxyPort = 3128;
     config.proxyUser = "edcguest";
     config.proxyPass = "edcguest";
     config.relayPort = 55555;
@@ -210,7 +219,7 @@ bool PromptAndSaveConfig(const std::string& path, Config& config) {
     config.bypassList = GetDefaultBypassList();
 
     if (SaveConfigToFile(path, config)) {
-        std::cout << "[Config] Applied MNNIT defaults (172.31.100.25:3128, edcguest).\n";
+        std::cout << "[Config] Applied MNNIT defaults (Pool auto-select, user: edcguest).\n";
         std::cout << "[Config] Saved TOML configuration to: " << path << "\n";
         std::cout << "[Config] Tip: You can customize proxy credentials or pool anytime in config.toml\n\n";
         return true;

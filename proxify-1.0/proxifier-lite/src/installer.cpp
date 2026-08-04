@@ -184,9 +184,7 @@ int main(int argc, char* argv[]) {
         std::string configContent =
             "# ProxyMan TOML Configuration File\n\n"
             "relay_port = 55555\n\n"
-            "[proxy]\n"
-            "ip = \"172.31.100.25\"\n"
-            "port = 3128\n"
+            "[auth]\n"
             "user = \"edcguest\"\n"
             "pass = \"edcguest\"\n\n"
             "proxy_pool = [\n"
