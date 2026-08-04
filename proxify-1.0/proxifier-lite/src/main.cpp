@@ -59,7 +59,6 @@ static bool RelaunchElevated(int argc, char* argv[]) {
 
     SHELLEXECUTEINFOW sei = { sizeof(sei) };
     sei.cbSize = sizeof(sei);
-    sei.hwnd = GetConsoleWindow();
     sei.lpVerb = L"runas";
     sei.lpFile = exePath;
     sei.lpParameters = args.c_str();

@@ -50,7 +50,6 @@ static bool RelaunchElevated(int argc, char* argv[]) {
 
     SHELLEXECUTEINFOW sei = { sizeof(sei) };
     sei.cbSize = sizeof(sei);
-    sei.hwnd = GetConsoleWindow();
     sei.lpVerb = L"runas";
     sei.lpFile = exePath;
     sei.lpParameters = args.c_str();
@@ -246,13 +245,13 @@ int main(int argc, char* argv[]) {
     }
     std::cout << "\n";
 
-    // 3. Automatically Add to System PATH & Select Startup Method
-    std::cout << "\x1b[1;32m[Step 3/3] System PATH & Autostart\x1b[0m\n";
+    // 3. System PATH Integration & Select Startup Method
+    std::cout << "\x1b[1;32m[Step 3/3] System PATH & Autostart Registration\x1b[0m\n";
     if (AddToPath(installDir)) {
-        std::cout << "\x1b[32m✔ Added ProxyMan directory (" << installDir.string() << ") to System PATH.\x1b[0m\n\n";
+        std::cout << "\x1b[32m✔ Added ProxyMan directory to System PATH.\x1b[0m\n\n";
     }
 
-    std::cout << "Choose Startup Option:\n";
+    std::cout << "Choose Autostart Option:\n";
     std::cout << "  \x1b[1;36m1)\x1b[0m Task Scheduler at Logon [\x1b[1;33mRECOMMENDED — Zero UAC Prompts, Starts at Logon\x1b[0m]\n";
     std::cout << "  \x1b[1;36m2)\x1b[0m Windows System Service [\x1b[1;33mZero UAC Prompts, Starts at PC Boot\x1b[0m]\n";
     std::cout << "  \x1b[1;36m3)\x1b[0m Skip Autostart (Manual Execution Only)\n";
