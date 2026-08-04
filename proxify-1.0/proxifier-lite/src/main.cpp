@@ -2,6 +2,7 @@
 #include "engine_controller.h"
 #include "network_watcher.h"
 #include "proxy_settings.h"
+#include "http_proxy_client.h"
 
 #include <winsock2.h>
 #include <windows.h>
@@ -10,6 +11,7 @@
 #include <string>
 #include <atomic>
 #include <cstdlib>
+#include <vector>
 
 #pragma comment(lib, "ws2_32.lib")
 #pragma comment(lib, "iphlpapi.lib")
@@ -64,12 +66,42 @@ static bool RelaunchElevated(int argc, char* argv[]) {
     return ShellExecuteExW(&sei) != FALSE;
 }
 
+static void PrintHelp() {
+    std::cout << "\x1b[1;36m";
+    std::cout << "===================================================================\n";
+    std::cout << "  ⚡ ProxyMan - Network-Aware Transparent Proxy Engine (v1.0.0)\n";
+    std::cout << "===================================================================\n";
+    std::cout << "\x1b[0m";
+    std::cout << "\x1b[1;32mUSAGE:\x1b[0m\n";
+    std::cout << "    ProxyMan.exe [FLAGS] [COMMANDS] [CONFIG_PATH]\n\n";
+
+    std::cout << "\x1b[1;32mINFORMATIONAL & POOL COMMANDS:\x1b[0m\n";
+    std::cout << "    \x1b[1;36m-h, --help\x1b[0m               Display this help & usage guide\n";
+    std::cout << "    \x1b[1;36m-v, --version\x1b[0m            Display ProxyMan version details\n";
+    std::cout << "    \x1b[1;36m--check-proxies\x1b[0m          Test health & latency across MNNIT proxy pool\n";
+    std::cout << "    \x1b[1;36m--set-user <u0> <p0>\x1b[0m     Update proxy credentials in config\n\n";
+
+    std::cout << "\x1b[1;32mAUTOSTART MANAGEMENT:\x1b[0m\n";
+    std::cout << "    \x1b[1;36m--install-startup\x1b[0m        Install Task Scheduler autostart (Zero UAC Prompts)\n";
+    std::cout << "    \x1b[1;36m--uninstall-startup\x1b[0m      Remove Task Scheduler autostart\n";
+    std::cout << "    \x1b[1;36m--install-service\x1b[0m        Install Windows System Service (Starts at Boot)\n";
+    std::cout << "    \x1b[1;36m--uninstall-service\x1b[0m      Remove Windows System Service\n\n";
+
+    std::cout << "\x1b[1;32mCONFIGURATION FILE:\x1b[0m\n";
+    std::cout << "    Default Path: \x1b[1;33m%USERPROFILE%\\.config\\proxyman\\config.txt\x1b[0m\n\n";
+
+    std::cout << "\x1b[1;32mMNNIT DEFAULT PROXY POOL:\x1b[0m\n";
+    std::cout << "    172.31.100.25:3128   (Primary Gateway)\n";
+    std::cout << "    172.31.100.27:3128   (Secondary Failover)\n";
+    std::cout << "    172.31.102.29:3128   (Secondary Failover)\n";
+    std::cout << "    172.31.103.29:3128   (Hostel Failover)\n";
+    std::cout << "    172.31.100.14:3128   (EDC Failover)\n";
+    std::cout << "===================================================================\n";
+}
+
 static bool InstallStartupTask() {
     wchar_t exePath[MAX_PATH];
-    if (GetModuleFileNameW(NULL, exePath, MAX_PATH) == 0) {
-        std::cerr << "[Main] Failed to get executable path.\n";
-        return false;
-    }
+    if (GetModuleFileNameW(NULL, exePath, MAX_PATH) == 0) return false;
 
     std::wstring cmd = L"schtasks /create /tn \"ProxyMan\" /tr \"\\\"";
     cmd += exePath;
@@ -80,7 +112,7 @@ static bool InstallStartupTask() {
         std::cout << "\n==========================================================\n";
         std::cout << "  ProxyMan Task Scheduler Autostart Registered! ✨\n";
         std::cout << "==========================================================\n";
-        std::cout << "Method:          Task Scheduler (/sc ONLOGON /rl HIGHEST) [RECOMMENDED]\n";
+        std::cout << "Method:          Task Scheduler (/sc ONLOGON /rl HIGHEST)\n";
         std::cout << "Execution:       Runs automatically at user logon\n";
         std::cout << "Privileges:      Highest Administrator (No UAC Prompts!)\n\n";
         return true;
@@ -103,10 +135,7 @@ static bool UninstallStartupTask() {
 
 static bool InstallWindowsService() {
     wchar_t exePath[MAX_PATH];
-    if (GetModuleFileNameW(NULL, exePath, MAX_PATH) == 0) {
-        std::cerr << "[Main] Failed to get executable path.\n";
-        return false;
-    }
+    if (GetModuleFileNameW(NULL, exePath, MAX_PATH) == 0) return false;
 
     std::wstring cmd = L"sc.exe create ProxyMan binPath= \"\\\"";
     cmd += exePath;
@@ -119,8 +148,7 @@ static bool InstallWindowsService() {
         std::cout << "  ProxyMan Windows System Service Registered! 🛡️\n";
         std::cout << "==========================================================\n";
         std::cout << "Method:          Windows System Service (NT AUTHORITY\\SYSTEM)\n";
-        std::cout << "Execution:       Starts at System Boot (Before User Logon Screen)\n";
-        std::cout << "Privileges:      SYSTEM (Invisible Headless Background Service)\n\n";
+        std::cout << "Execution:       Starts at System Boot (Before User Logon Screen)\n\n";
         return true;
     } else {
         std::cerr << "[Main] sc.exe create failed with error code: " << ret << std::endl;
@@ -140,9 +168,73 @@ static bool UninstallWindowsService() {
     }
 }
 
+static void CheckProxyPoolHealth(const Config& cfg) {
+    WSADATA wsaData;
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        std::cerr << "[ProxyCheck] WSAStartup failed." << std::endl;
+        return;
+    }
+
+    std::cout << "\n\x1b[1;36m==========================================================\x1b[0m\n";
+    std::cout << "\x1b[1;36m  ⚡ ProxyMan MNNIT Proxy Pool Health & Latency Test      \x1b[0m\n";
+    std::cout << "\x1b[1;36m==========================================================\x1b[0m\n";
+    std::cout << "Testing credentials: user=\x1b[1;33m" << cfg.proxyUser << "\x1b[0m\n\n";
+
+    long minLatency = 999999;
+    std::string bestProxyIp = cfg.proxyIp;
+    uint16_t bestProxyPort = cfg.proxyPort;
+
+    for (const auto& proxyEntry : cfg.proxyPool) {
+        std::string ip = proxyEntry;
+        uint16_t port = 3128;
+        auto pos = proxyEntry.find(':');
+        if (pos != std::string::npos) {
+            ip = proxyEntry.substr(0, pos);
+            try { port = static_cast<uint16_t>(std::stoi(proxyEntry.substr(pos + 1))); } catch (...) {}
+        }
+
+        std::cout << "  Testing " << ip << ":" << port << " ... ";
+        ProxyHealthResult res = TestProxyHealth(ip, port, cfg.proxyUser, cfg.proxyPass, 3000);
+
+        if (res.isHealthy) {
+            std::cout << "\x1b[32m✔ ONLINE\x1b[0m (" << res.latencyMs << " ms)\n";
+            if (res.latencyMs < minLatency) {
+                minLatency = res.latencyMs;
+                bestProxyIp = ip;
+                bestProxyPort = port;
+            }
+        } else {
+            std::cout << "\x1b[31m❌ OFFLINE / UNREACHABLE\x1b[0m\n";
+        }
+    }
+
+    std::cout << "\n----------------------------------------------------------\n";
+    if (minLatency < 999999) {
+        std::cout << "\x1b[1;32mOptimal Active Proxy:\x1b[0m " << bestProxyIp << ":" << bestProxyPort
+                  << " (" << minLatency << " ms)\n";
+    } else {
+        std::cout << "\x1b[1;31mWarning: All proxy servers in pool are currently unreachable.\x1b[0m\n";
+    }
+    std::cout << "==========================================================\n\n";
+
+    WSACleanup();
+}
+
 int main(int argc, char* argv[]) {
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
+
+    // Check for --help or -h without requiring elevation first
+    for (int i = 1; i < argc; ++i) {
+        std::string arg = argv[i];
+        if (arg == "-h" || arg == "--help" || arg == "/?") {
+            PrintHelp();
+            return 0;
+        } else if (arg == "-v" || arg == "--version") {
+            std::cout << "ProxyMan v1.0.0 (x64) - Network-Aware Transparent Proxy Engine for Windows\n";
+            return 0;
+        }
+    }
 
     // Check Administrator privileges - relaunch in new elevated window if not Admin
     if (!IsElevated()) {
@@ -156,7 +248,21 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // Check command line flags for startup task/service management
+    // Load config
+    Config cfg;
+    std::string defaultConfigPath = GetDefaultConfigPath();
+    bool loaded = false;
+
+    if (argc > 1 && argv[1][0] != '-') {
+        loaded = LoadConfigFromFile(argv[1], cfg);
+    } else {
+        loaded = LoadConfigFromFile(defaultConfigPath, cfg);
+        if (!loaded) {
+            loaded = LoadConfigFromFile("proxy-config.txt", cfg);
+        }
+    }
+
+    // Check command line flags for management & pool tools
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "--install-startup") {
@@ -170,6 +276,15 @@ int main(int argc, char* argv[]) {
             return 0;
         } else if (arg == "--uninstall-service") {
             UninstallWindowsService();
+            return 0;
+        } else if (arg == "--check-proxies") {
+            CheckProxyPoolHealth(cfg);
+            return 0;
+        } else if (arg == "--set-user" && i + 2 < argc) {
+            cfg.proxyUser = argv[i + 1];
+            cfg.proxyPass = argv[i + 2];
+            SaveConfigToFile(defaultConfigPath, cfg);
+            std::cout << "[Config] EDC credentials updated successfully: user=" << cfg.proxyUser << "\n";
             return 0;
         }
     }
@@ -191,20 +306,6 @@ int main(int argc, char* argv[]) {
 
     SetConsoleCtrlHandler(ConsoleCtrlHandler, TRUE);
 
-    // Load config
-    Config cfg;
-    std::string defaultConfigPath = GetDefaultConfigPath();
-    bool loaded = false;
-
-    if (argc > 1 && argv[1][0] != '-') {
-        loaded = LoadConfigFromFile(argv[1], cfg);
-    } else {
-        loaded = LoadConfigFromFile(defaultConfigPath, cfg);
-        if (!loaded) {
-            loaded = LoadConfigFromFile("proxy-config.txt", cfg);
-        }
-    }
-
     if (!loaded) {
         if (!PromptAndSaveConfig(defaultConfigPath, cfg)) {
             std::cerr << "Failed to initialize configuration." << std::endl;
@@ -212,6 +313,31 @@ int main(int argc, char* argv[]) {
             return 1;
         }
     }
+
+    // Perform quick initial proxy pool health check on launch
+    std::string activeProxyIp = cfg.proxyIp;
+    uint16_t activeProxyPort = cfg.proxyPort;
+    long bestLatency = 999999;
+
+    std::printf("[Main] Checking MNNIT Proxy Pool health...\n");
+    for (const auto& pe : cfg.proxyPool) {
+        std::string ip = pe;
+        uint16_t port = 3128;
+        auto pos = pe.find(':');
+        if (pos != std::string::npos) {
+            ip = pe.substr(0, pos);
+            try { port = static_cast<uint16_t>(std::stoi(pe.substr(pos + 1))); } catch (...) {}
+        }
+        ProxyHealthResult res = TestProxyHealth(ip, port, cfg.proxyUser, cfg.proxyPass, 2000);
+        if (res.isHealthy && res.latencyMs < bestLatency) {
+            bestLatency = res.latencyMs;
+            activeProxyIp = ip;
+            activeProxyPort = port;
+        }
+    }
+
+    cfg.proxyIp = activeProxyIp;
+    cfg.proxyPort = activeProxyPort;
 
     std::printf("==========================================================\n");
     std::printf("  ProxyMan - Network-Aware Transparent Proxy Engine\n");

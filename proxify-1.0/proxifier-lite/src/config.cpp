@@ -15,6 +15,16 @@ static std::string Trim(const std::string& s) {
     return s.substr(start, end - start + 1);
 }
 
+static std::vector<std::string> GetDefaultProxyPool() {
+    return {
+        "172.31.100.25:3128",
+        "172.31.100.27:3128",
+        "172.31.102.29:3128",
+        "172.31.103.29:3128",
+        "172.31.100.14:3128"
+    };
+}
+
 std::string GetDefaultConfigPath() {
     const char* userProfile = std::getenv("USERPROFILE");
     if (!userProfile) userProfile = std::getenv("HOME");
@@ -35,6 +45,7 @@ bool LoadConfigFromFile(const std::string& path, Config& config) {
         return false;
     }
 
+    config.proxyPool.clear();
     std::string line;
     while (std::getline(file, line)) {
         line = Trim(line);
@@ -56,13 +67,24 @@ bool LoadConfigFromFile(const std::string& path, Config& config) {
             config.proxyPass = val;
         } else if (key == "relay_port") {
             try { config.relayPort = static_cast<uint16_t>(std::stoi(val)); } catch (...) {}
+        } else if (key == "proxy_pool") {
+            std::stringstream ss(val);
+            std::string item;
+            while (std::getline(ss, item, ',')) {
+                item = Trim(item);
+                if (!item.empty()) config.proxyPool.push_back(item);
+            }
         }
+    }
+
+    if (config.proxyPool.empty()) {
+        config.proxyPool = GetDefaultProxyPool();
     }
 
     return !config.proxyIp.empty();
 }
 
-bool SaveConfigToFile(const std::string& path, const Config& config) {
+bool SaveConfigToFile(const std::string& path, Config& config) {
     try {
         fs::path p(path);
         if (p.has_parent_path()) {
@@ -78,6 +100,15 @@ bool SaveConfigToFile(const std::string& path, const Config& config) {
         file << "proxy_user=" << config.proxyUser << "\n";
         file << "proxy_pass=" << config.proxyPass << "\n";
         file << "relay_port=" << config.relayPort << "\n";
+
+        if (!config.proxyPool.empty()) {
+            file << "proxy_pool=";
+            for (size_t i = 0; i < config.proxyPool.size(); ++i) {
+                if (i > 0) file << ",";
+                file << config.proxyPool[i];
+            }
+            file << "\n";
+        }
         return true;
     } catch (const std::exception& e) {
         std::cerr << "[Config] Failed to save config to " << path << ": " << e.what() << std::endl;
@@ -130,6 +161,8 @@ bool PromptAndSaveConfig(const std::string& path, Config& config) {
     } else {
         try { config.relayPort = static_cast<uint16_t>(std::stoi(input)); } catch (...) { config.relayPort = 55555; }
     }
+
+    config.proxyPool = GetDefaultProxyPool();
 
     std::cout << "\n[Config] Saving configuration to: " << path << std::endl;
     if (SaveConfigToFile(path, config)) {

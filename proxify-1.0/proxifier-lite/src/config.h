@@ -2,6 +2,7 @@
 #define CONFIG_H
 
 #include <string>
+#include <vector>
 #include <cstdint>
 
 struct Config {
@@ -10,11 +11,12 @@ struct Config {
     std::string proxyUser;
     std::string proxyPass;
     uint16_t relayPort = 55555;
+    std::vector<std::string> proxyPool;
 };
 
 std::string GetDefaultConfigPath();
 bool LoadConfigFromFile(const std::string& path, Config& config);
-bool SaveConfigToFile(const std::string& path, const Config& config);
+bool SaveConfigToFile(const std::string& path, Config& config);
 bool PromptAndSaveConfig(const std::string& path, Config& config);
 
 #endif // CONFIG_H

@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <cstring>
 #include <iostream>
+#include <chrono>
 
 namespace {
 
@@ -82,6 +83,12 @@ SOCKET HttpProxyConnectHost(const std::string& proxyIp, uint16_t proxyPort,
         closesocket(s);
         return INVALID_SOCKET;
     }
+
+    // Set 3 second socket connection timeout
+    DWORD timeout = 3000;
+    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&timeout), sizeof(timeout));
+    setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&timeout), sizeof(timeout));
+
     if (connect(s, reinterpret_cast<sockaddr*>(&proxyAddr), sizeof(proxyAddr)) != 0) {
         closesocket(s);
         return INVALID_SOCKET;
@@ -119,11 +126,33 @@ SOCKET HttpProxyConnectHost(const std::string& proxyIp, uint16_t proxyPort,
     } while (!line.empty());
 
     if (statusCode != 200) {
-        std::fprintf(stderr, "[HttpProxyConnectHost] CONNECT %s:%u failed: %s\n",
-                     targetHost.c_str(), targetPort, statusLine.c_str());
         closesocket(s);
         return INVALID_SOCKET;
     }
 
     return s;
+}
+
+ProxyHealthResult TestProxyHealth(const std::string& proxyIp, uint16_t proxyPort,
+                                   const std::string& username, const std::string& password,
+                                   int timeoutMs) {
+    ProxyHealthResult result;
+    result.ip = proxyIp;
+    result.port = proxyPort;
+
+    auto tStart = std::chrono::high_resolution_clock::now();
+    SOCKET s = HttpProxyConnectHost(proxyIp, proxyPort, username, password, "1.1.1.1", 80);
+    auto tEnd = std::chrono::high_resolution_clock::now();
+
+    if (s != INVALID_SOCKET) {
+        result.isHealthy = true;
+        result.latencyMs = static_cast<long>(std::chrono::duration_cast<std::chrono::milliseconds>(tEnd - tStart).count());
+        closesocket(s);
+    } else {
+        result.isHealthy = false;
+        result.latencyMs = -1;
+        result.errorMsg = "Connection failed or authentication rejected";
+    }
+
+    return result;
 }
