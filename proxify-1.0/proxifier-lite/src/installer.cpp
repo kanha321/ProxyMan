@@ -294,12 +294,43 @@ int main(int argc, char* argv[]) {
     std::cout << "│  🎉 ProxyMan Installation Completed Successfully!           │\n";
     std::cout << "└─────────────────────────────────────────────────────────────┘\n";
     std::cout << "\x1b[0m\n";
-    std::cout << "Installed at: " << installedExe.string() << "\n";
-    std::cout << "\x1b[1;33m💡 Tip:\x1b[0m It is recommended to restart your PC (or reopen terminal windows)\n";
-    std::cout << "        so System PATH changes take effect everywhere.\n\n";
+    std::cout << "Installed at: \x1b[1;36m" << installedExe.string() << "\x1b[0m\n";
+    std::cout << "\x1b[1;33m💡 Tip:\x1b[0m Restarting your PC ensures all system applications automatically\n";
+    std::cout << "        route through ProxyMan on boot.\n\n";
 
-    std::cout << "Press Enter to exit...";
-    std::string finishInput;
-    std::getline(std::cin, finishInput);
+    std::cout << "What would you like to do next?\n";
+    std::cout << "  \x1b[1;36m1)\x1b[0m Launch ProxyMan now [\x1b[1;33mRuns in background detached from console\x1b[0m]\n";
+    std::cout << "  \x1b[1;36m2)\x1b[0m Restart PC now\n";
+    std::cout << "  \x1b[1;36m3)\x1b[0m Exit setup (ProxyMan will start on next boot)\n";
+    std::cout << "Select choice [\x1b[1;33mdefault: 1\x1b[0m]: ";
+
+    std::string postChoiceStr;
+    std::getline(std::cin, postChoiceStr);
+    postChoiceStr = Trim(postChoiceStr);
+    int postChoice = postChoiceStr.empty() ? 1 : std::atoi(postChoiceStr.c_str());
+
+    if (postChoice == 1) {
+        std::cout << "\n[Installer] Launching ProxyMan in background...\n";
+        STARTUPINFOW si = { sizeof(si) };
+        PROCESS_INFORMATION pi = { 0 };
+        std::wstring exeW = installedExe.wstring();
+        if (CreateProcessW(exeW.c_str(), NULL, NULL, NULL, FALSE, CREATE_NO_WINDOW | DETACHED_PROCESS, NULL, NULL, &si, &pi)) {
+            CloseHandle(pi.hProcess);
+            CloseHandle(pi.hThread);
+            std::cout << "\x1b[32m✔ ProxyMan engine started in background!\x1b[0m\n\n";
+        } else {
+            std::cout << "\x1b[31m❌ Failed to start ProxyMan background process.\x1b[0m\n\n";
+        }
+        Sleep(1000);
+    } else if (postChoice == 2) {
+        std::cout << "\n[Installer] Initiating PC restart in 5 seconds...\n";
+        _wsystem(L"shutdown /r /t 5 /c \"ProxyMan Setup completed. Restarting system...\"");
+        Sleep(2000);
+    } else {
+        std::cout << "\nExit setup. Press Enter to exit...";
+        std::string dummy;
+        std::getline(std::cin, dummy);
+    }
+
     return 0;
 }
