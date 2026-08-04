@@ -4,6 +4,7 @@
 #include <shellapi.h>
 #include <iostream>
 #include <fstream>
+#include <sstream>
 #include <string>
 #include <vector>
 #include <filesystem>
@@ -172,7 +173,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // 2. Write Pre-Configured MNNIT Settings (config.toml)
+    // 2. Write Pre-Configured MNNIT Settings (config.toml) & Display Configuration
     std::cout << "\x1b[1;32m[Step 2/3] Configuration Settings\x1b[0m\n";
     const char* userProfile = std::getenv("USERPROFILE");
     if (userProfile) {
@@ -180,33 +181,48 @@ int main(int argc, char* argv[]) {
         fs::create_directories(configDir);
         fs::path configFile = configDir / "config.toml";
 
+        std::string configContent =
+            "# ProxyMan TOML Configuration File\n\n"
+            "relay_port = 55555\n\n"
+            "[proxy]\n"
+            "ip = \"172.31.100.25\"\n"
+            "port = 3128\n"
+            "user = \"edcguest\"\n"
+            "pass = \"edcguest\"\n\n"
+            "proxy_pool = [\n"
+            "    \"172.31.100.25:3128\",\n"
+            "    \"172.31.100.27:3128\",\n"
+            "    \"172.31.102.29:3128\",\n"
+            "    \"172.31.103.29:3128\",\n"
+            "    \"172.31.100.14:3128\"\n"
+            "]\n\n"
+            "bypass_list = [\n"
+            "    \"172.31.*\",\n"
+            "    \"10.*\",\n"
+            "    \"127.*\",\n"
+            "    \"localhost\",\n"
+            "    \"mnnit.ac.in\"\n"
+            "]\n";
+
         std::ofstream cfgFile(configFile);
         if (cfgFile.is_open()) {
-            cfgFile << "# ProxyMan TOML Configuration File\n\n";
-            cfgFile << "relay_port = 55555\n\n";
-            cfgFile << "[proxy]\n";
-            cfgFile << "ip = \"172.31.100.25\"\n";
-            cfgFile << "port = 3128\n";
-            cfgFile << "user = \"edcguest\"\n";
-            cfgFile << "pass = \"edcguest\"\n\n";
-            cfgFile << "proxy_pool = [\n";
-            cfgFile << "    \"172.31.100.25:3128\",\n";
-            cfgFile << "    \"172.31.100.27:3128\",\n";
-            cfgFile << "    \"172.31.102.29:3128\",\n";
-            cfgFile << "    \"172.31.103.29:3128\",\n";
-            cfgFile << "    \"172.31.100.14:3128\"\n";
-            cfgFile << "]\n\n";
-            cfgFile << "bypass_list = [\n";
-            cfgFile << "    \"172.31.*\",\n";
-            cfgFile << "    \"10.*\",\n";
-            cfgFile << "    \"127.*\",\n";
-            cfgFile << "    \"localhost\",\n";
-            cfgFile << "    \"mnnit.ac.in\"\n";
-            cfgFile << "]\n";
-            std::cout << "\x1b[32m✔ Applied MNNIT defaults (172.31.100.25:3128, edcguest).\x1b[0m\n";
-            std::cout << "\x1b[32m✔ Configuration saved to: " << configFile.string() << "\x1b[0m\n";
-            std::cout << "\x1b[90m  ℹ Tip: You can customize your settings or EDC credentials anytime in config.toml\x1b[0m\n\n";
+            cfgFile << configContent;
+            cfgFile.close();
         }
+
+        std::cout << "\x1b[32m✔ Configuration file created at:\x1b[0m\n";
+        std::cout << "  \x1b[1;33m" << configFile.string() << "\x1b[0m\n\n";
+
+        std::cout << "\x1b[1;36m┌─ [ " << configFile.string() << " ] ────────┐\x1b[0m\n";
+        std::stringstream ss(configContent);
+        std::string line;
+        while (std::getline(ss, line)) {
+            std::cout << "\x1b[36m│\x1b[0m " << line << "\n";
+        }
+        std::cout << "\x1b[1;36m└──────────────────────────────────────────────────────────────┘\x1b[0m\n\n";
+
+        std::cout << "\x1b[1;33m💡 Tip:\x1b[0m You can open and edit this \x1b[1;36mconfig.toml\x1b[0m file anytime in Notepad or VS Code\n";
+        std::cout << "        to update your EDC credentials or add custom proxy IPs.\n\n";
     }
 
     // Extract Embedded Binaries from Installer EXE into Target Install Directory
