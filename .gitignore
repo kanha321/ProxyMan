@@ -1,0 +1,88 @@
+# ===================================================================
+# ProxyMan Root .gitignore
+# Covers C++, Rust, CMake, Visual Studio, WinDivert SDK, & Credentials
+# ===================================================================
+
+# -------------------------------------------------------------------
+# Sensitive Configuration & Credentials (MUST BE IGNORED)
+# -------------------------------------------------------------------
+proxy-config.txt
+config.txt
+**/config.txt
+*.env
+*.secret
+*.key
+
+# -------------------------------------------------------------------
+# Rust Build Artifacts
+# -------------------------------------------------------------------
+/target/
+**/target/
+**/*.rs.bk
+
+# -------------------------------------------------------------------
+# C / C++ / CMake Build Folders & Intermediate Artifacts
+# -------------------------------------------------------------------
+build/
+**/build/
+cmake-build-*/
+bin/
+obj/
+out/
+x64/
+x86/
+Release/
+Debug/
+**/Release/
+**/Debug/
+
+# CMake Generated Files
+CMakeCache.txt
+CMakeFiles/
+**/CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# Visual Studio & MSVC Files
+.vs/
+*.vcxproj.user
+*.vcxproj.fileListAbsolute
+*.sln.docstates
+
+# -------------------------------------------------------------------
+# Compiled Binaries & Libraries (Except Vendored SDKs)
+# -------------------------------------------------------------------
+*.exe
+*.dll
+*.sys
+*.lib
+*.pdb
+*.ilk
+*.exp
+*.obj
+*.o
+
+# Un-ignore vendored WinDivert SDK headers and libs
+!proxify-1.0/WinDivert-2.2.2-A/**
+
+# -------------------------------------------------------------------
+# Logs & Temporary Files
+# -------------------------------------------------------------------
+*.log
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+
+# -------------------------------------------------------------------
+# OS & IDE Junk
+# -------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+.idea/
