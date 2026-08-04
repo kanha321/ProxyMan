@@ -322,7 +322,7 @@ int main(int argc, char* argv[]) {
     uint16_t activeProxyPort = cfg.proxyPort;
     long bestLatency = 999999;
 
-    std::printf("[Main] Checking MNNIT Proxy Pool health...\n");
+    std::printf("[Main] Auto-selecting optimal proxy from MNNIT pool...\n");
     for (const auto& pe : cfg.proxyPool) {
         std::string ip = pe;
         uint16_t port = 3128;
@@ -331,16 +331,31 @@ int main(int argc, char* argv[]) {
             ip = pe.substr(0, pos);
             try { port = static_cast<uint16_t>(std::stoi(pe.substr(pos + 1))); } catch (...) {}
         }
-        ProxyHealthResult res = TestProxyHealth(ip, port, cfg.proxyUser, cfg.proxyPass, 2000);
-        if (res.isHealthy && res.latencyMs < bestLatency) {
-            bestLatency = res.latencyMs;
-            activeProxyIp = ip;
-            activeProxyPort = port;
+        std::printf("  • Testing %s:%u ... ", ip.c_str(), port);
+        std::fflush(stdout);
+
+        ProxyHealthResult res = TestProxyHealth(ip, port, cfg.proxyUser, cfg.proxyPass, 1500);
+        if (res.isHealthy) {
+            std::printf("\x1b[32m✔ ONLINE\x1b[0m (%ld ms)\n", res.latencyMs);
+            if (res.latencyMs < bestLatency) {
+                bestLatency = res.latencyMs;
+                activeProxyIp = ip;
+                activeProxyPort = port;
+            }
+        } else {
+            std::printf("\x1b[31m❌ OFFLINE\x1b[0m\n");
         }
     }
 
     cfg.proxyIp = activeProxyIp;
     cfg.proxyPort = activeProxyPort;
+
+    if (bestLatency < 999999) {
+        std::printf("\x1b[1;32m[Pool] Selected optimal proxy -> %s:%u (%ld ms latency)\x1b[0m\n\n",
+                    cfg.proxyIp.c_str(), cfg.proxyPort, bestLatency);
+    } else {
+        std::printf("\x1b[1;33m[Pool] Defaulting to %s:%u\x1b[0m\n\n", cfg.proxyIp.c_str(), cfg.proxyPort);
+    }
 
     std::printf("==========================================================\n");
     std::printf("  ProxyMan - Network-Aware Transparent Proxy Engine\n");
