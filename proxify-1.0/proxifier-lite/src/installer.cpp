@@ -294,7 +294,9 @@ int main(int argc, char* argv[]) {
     std::cout << "│  🎉 ProxyMan Installation Completed Successfully!           │\n";
     std::cout << "└─────────────────────────────────────────────────────────────┘\n";
     std::cout << "\x1b[0m\n";
-    std::cout << "Installed at: " << installedExe.string() << "\n\n";
+    std::cout << "Installed at: " << installedExe.string() << "\n";
+    std::cout << "\x1b[1;33m💡 Tip:\x1b[0m It is recommended to restart your PC (or reopen terminal windows)\n";
+    std::cout << "        so System PATH changes take effect everywhere.\n\n";
 
     std::cout << "Press Enter to exit...";
     std::string finishInput;
