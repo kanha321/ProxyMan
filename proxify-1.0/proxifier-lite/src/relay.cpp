@@ -91,6 +91,52 @@ static std::string ExtractSNI(const char* buf, size_t len) {
     return "";
 }
 
+static bool MatchWildcard(const std::string& pattern, const std::string& str) {
+    if (pattern == str) return true;
+    if (pattern == "*") return true;
+    if (!pattern.empty() && pattern.back() == '*') {
+        std::string prefix = pattern.substr(0, pattern.size() - 1);
+        return str.rfind(prefix, 0) == 0;
+    }
+    return false;
+}
+
+static bool ShouldBypassProxy(const std::string& targetHostOrIp, const std::vector<std::string>& bypassList) {
+    for (const auto& entry : bypassList) {
+        if (MatchWildcard(entry, targetHostOrIp)) return true;
+    }
+    return false;
+}
+
+static SOCKET ConnectDirectHost(const std::string& host, uint16_t port) {
+    SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (s == INVALID_SOCKET) return INVALID_SOCKET;
+
+    sockaddr_in addr{};
+    addr.sin_family = AF_INET;
+    addr.sin_port = htons(port);
+
+    if (inet_pton(AF_INET, host.c_str(), &addr.sin_addr) != 1) {
+        addrinfo hints{}, *res = nullptr;
+        hints.ai_family = AF_INET;
+        hints.ai_socktype = SOCK_STREAM;
+        std::string portStr = std::to_string(port);
+        if (getaddrinfo(host.c_str(), portStr.c_str(), &hints, &res) == 0 && res) {
+            addr = *reinterpret_cast<sockaddr_in*>(res->ai_addr);
+            freeaddrinfo(res);
+        } else {
+            closesocket(s);
+            return INVALID_SOCKET;
+        }
+    }
+
+    if (connect(s, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0) {
+        closesocket(s);
+        return INVALID_SOCKET;
+    }
+    return s;
+}
+
 void HandleConnection(SOCKET appSock, ConnTable* table, const Config* cfg, StoppableRelay* relay, DnsTable* dnsTable) {
     if (relay) relay->IncrementActiveConnections();
 
@@ -118,32 +164,31 @@ void HandleConnection(SOCKET appSock, ConnTable* table, const Config* cfg, Stopp
     if (foundInTable) {
         // WinDivert NAT-redirected flow
         uint16_t targetPortHost = ntohs(origPortNet);
-        std::string dnsDomain;
+        std::string targetHost;
+        in_addr origInAddr{};
+        origInAddr.s_addr = origAddrNet;
+        char origIpStr[INET_ADDRSTRLEN];
+        inet_ntop(AF_INET, &origInAddr, origIpStr, sizeof(origIpStr));
 
-        if (dnsTable != nullptr && dnsTable->LookupDomain(origAddrNet, dnsDomain)) {
-            // Domain resolved via DNS Interceptor
-            upstream = HttpProxyConnectHost(cfg->proxyIp, cfg->proxyPort,
-                                            cfg->proxyUser, cfg->proxyPass,
-                                            dnsDomain, targetPortHost);
+        if (dnsTable != nullptr && dnsTable->LookupDomain(origAddrNet, targetHost)) {
+            // Resolved domain via DNS Interceptor
         } else {
-            // Secondary priority: TLS Client Hello SNI parser
             char peekBuf[2048] = {0};
             int peekLen = recv(appSock, peekBuf, sizeof(peekBuf), MSG_PEEK);
-
-            std::string sniHost;
             if (peekLen > 5) {
-                sniHost = ExtractSNI(peekBuf, peekLen);
+                targetHost = ExtractSNI(peekBuf, peekLen);
             }
+            if (targetHost.empty()) {
+                targetHost = origIpStr;
+            }
+        }
 
-            if (!sniHost.empty()) {
-                upstream = HttpProxyConnectHost(cfg->proxyIp, cfg->proxyPort,
-                                                cfg->proxyUser, cfg->proxyPass,
-                                                sniHost, targetPortHost);
-            } else {
-                upstream = HttpProxyConnect(cfg->proxyIp, cfg->proxyPort,
+        if (cfg && ShouldBypassProxy(targetHost, cfg->bypassList)) {
+            upstream = ConnectDirectHost(targetHost, targetPortHost);
+        } else {
+            upstream = HttpProxyConnectHost(cfg->proxyIp, cfg->proxyPort,
                                             cfg->proxyUser, cfg->proxyPass,
-                                            origAddrNet, origPortNet);
-            }
+                                            targetHost, targetPortHost);
         }
     } else {
         // Direct local HTTP/CONNECT request (e.g. from System Proxy)
@@ -170,9 +215,13 @@ void HandleConnection(SOCKET appSock, ConnTable* table, const Config* cfg, Stopp
 
                 ParseHostPort(url, targetHost, targetPort, 443);
 
-                upstream = HttpProxyConnectHost(cfg->proxyIp, cfg->proxyPort,
-                                                cfg->proxyUser, cfg->proxyPass,
-                                                targetHost, targetPort);
+                if (cfg && ShouldBypassProxy(targetHost, cfg->bypassList)) {
+                    upstream = ConnectDirectHost(targetHost, targetPort);
+                } else {
+                    upstream = HttpProxyConnectHost(cfg->proxyIp, cfg->proxyPort,
+                                                    cfg->proxyUser, cfg->proxyPass,
+                                                    targetHost, targetPort);
+                }
 
                 if (upstream != INVALID_SOCKET) {
                     const char* okResp = "HTTP/1.1 200 Connection Established\r\n\r\n";
@@ -185,9 +234,13 @@ void HandleConnection(SOCKET appSock, ConnTable* table, const Config* cfg, Stopp
                     std::string hostPart = (pathPos != std::string::npos) ? hostAndPath.substr(0, pathPos) : hostAndPath;
                     ParseHostPort(hostPart, targetHost, targetPort, 80);
 
-                    upstream = HttpProxyConnectHost(cfg->proxyIp, cfg->proxyPort,
-                                                    cfg->proxyUser, cfg->proxyPass,
-                                                    targetHost, targetPort);
+                    if (cfg && ShouldBypassProxy(targetHost, cfg->bypassList)) {
+                        upstream = ConnectDirectHost(targetHost, targetPort);
+                    } else {
+                        upstream = HttpProxyConnectHost(cfg->proxyIp, cfg->proxyPort,
+                                                        cfg->proxyUser, cfg->proxyPass,
+                                                        targetHost, targetPort);
+                    }
                 }
             }
         }

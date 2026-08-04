@@ -2,10 +2,12 @@
 
 #include <windows.h>
 #include <wininet.h>
+#include <shellapi.h>
 #include <iostream>
 #include <vector>
 
 #pragma comment(lib, "wininet.lib")
+#pragma comment(lib, "shell32.lib")
 
 static const wchar_t* kInternetSettingsSubKey = L"Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings";
 static const wchar_t* kEnvironmentSubKey = L"Environment";
@@ -52,6 +54,25 @@ static void SetUserEnvVar(const wchar_t* name, const wchar_t* value) {
     }
 }
 
+void ShowNotificationToast(const std::string& title, const std::string& message) {
+    std::wstring wTitle = StringToWString(title);
+    std::wstring wMsg = StringToWString(message);
+
+    NOTIFYICONDATAW nid = { sizeof(nid) };
+    nid.hWnd = NULL;
+    nid.uID = 1001;
+    nid.uFlags = NIF_INFO | NIF_ICON;
+    nid.hIcon = LoadIcon(NULL, IDI_INFORMATION);
+    nid.dwInfoFlags = NIIF_INFO;
+
+    wcsncpy_s(nid.szInfoTitle, wTitle.c_str(), _TRUNCATE);
+    wcsncpy_s(nid.szInfo, wMsg.c_str(), _TRUNCATE);
+
+    Shell_NotifyIconW(NIM_ADD, &nid);
+    Sleep(50);
+    Shell_NotifyIconW(NIM_DELETE, &nid);
+}
+
 bool SetSystemProxy(const std::string& proxyHostPort) {
     HKEY hKey;
     LONG lRes = RegOpenKeyExW(HKEY_CURRENT_USER, kInternetSettingsSubKey, 0, KEY_SET_VALUE, &hKey);
@@ -66,7 +87,7 @@ bool SetSystemProxy(const std::string& proxyHostPort) {
     std::wstring wProxyHostPort = StringToWString(proxyHostPort);
     RegSetValueExW(hKey, L"ProxyServer", 0, REG_SZ, reinterpret_cast<const BYTE*>(wProxyHostPort.c_str()), static_cast<DWORD>((wProxyHostPort.size() + 1) * sizeof(wchar_t)));
 
-    const wchar_t* wOverride = L"localhost;127.*;10.*;172.16.*;172.17.*;172.18.*;172.19.*;172.20.*;172.21.*;172.22.*;172.23.*;172.24.*;172.25.*;172.26.*;172.27.*;172.28.*;172.29.*;172.30.*;172.31.*;192.168.*;<local>";
+    const wchar_t* wOverride = L"localhost;127.*;10.*;172.16.*;172.17.*;172.18.*;172.19.*;172.20.*;172.21.*;172.22.*;172.23.*;172.24.*;172.25.*;172.26.*;172.27.*;172.28.*;172.29.*;172.30.*;172.31.*;192.168.*;*.mnnit.ac.in;<local>";
     RegSetValueExW(hKey, L"ProxyOverride", 0, REG_SZ, reinterpret_cast<const BYTE*>(wOverride), static_cast<DWORD>((wcslen(wOverride) + 1) * sizeof(wchar_t)));
 
     RegCloseKey(hKey);

@@ -361,9 +361,11 @@ int main(int argc, char* argv[]) {
         std::string proxyStr = "127.0.0.1:" + std::to_string(cfg.relayPort);
         SetSystemProxy(proxyStr);
         controller.StartEngine(cfg);
+        ShowNotificationToast("⚡ ProxyMan", "Connected to MNNIT Ethernet (" + cfg.proxyIp + ":" + std::to_string(cfg.proxyPort) + ")");
     } else {
         std::printf("[Main] Not on Ethernet - engine idle, waiting for network change.\n");
         ClearSystemProxy();
+        ShowNotificationToast("📶 ProxyMan", "Switched to Wi-Fi / Hotspot (Proxy Bypassed)");
     }
 
     // Watch for network changes with debounced callback
@@ -376,12 +378,14 @@ int main(int argc, char* argv[]) {
                 std::string proxyStr = "127.0.0.1:" + std::to_string(cfg.relayPort);
                 SetSystemProxy(proxyStr);
                 controller.StartEngine(cfg);
+                ShowNotificationToast("⚡ ProxyMan", "Connected to MNNIT Ethernet (" + cfg.proxyIp + ":" + std::to_string(cfg.proxyPort) + ")");
             }
         } else {
             if (controller.IsRunning()) {
                 std::printf("[Main] Ethernet disconnected - stopping engine and clearing system proxy.\n");
                 controller.StopEngine();
                 ClearSystemProxy();
+                ShowNotificationToast("📶 ProxyMan", "Switched to Wi-Fi / Hotspot (Proxy Bypassed)");
             }
         }
     });
