@@ -3,6 +3,7 @@
 #include "network_watcher.h"
 #include "proxy_settings.h"
 #include "http_proxy_client.h"
+#include "data_tracker.h"
 
 #include <winsock2.h>
 #include <windows.h>
@@ -80,6 +81,7 @@ static void PrintHelp() {
     std::cout << "    \x1b[1;36m-h, --help\x1b[0m               Display this help & usage guide\n";
     std::cout << "    \x1b[1;36m-v, --version\x1b[0m            Display ProxyMan version details\n";
     std::cout << "    \x1b[1;36m--stop\x1b[0m                   Stop active background ProxyMan engine & restore system proxy\n";
+    std::cout << "    \x1b[1;36m--stats\x1b[0m                  Display session data usage & application traffic summary\n";
     std::cout << "    \x1b[1;36m--speedtest\x1b[0m              Run MNNIT proxy speed & latency benchmark\n";
     std::cout << "    \x1b[1;36m--check-proxies\x1b[0m          Test health & latency across MNNIT proxy pool\n";
     std::cout << "    \x1b[1;36m--set-user <u0> <p0>\x1b[0m     Update proxy credentials in config\n\n";
@@ -298,6 +300,9 @@ int main(int argc, char* argv[]) {
                 ClearSystemProxy();
                 std::cout << "\x1b[33m[Main] No running ProxyMan instance found. Cleared system proxy.\x1b[0m\n";
             }
+            return 0;
+        } else if (arg == "--stats") {
+            DataTracker::Instance().PrintSummaryReport();
             return 0;
         } else if (arg == "--install-startup") {
             InstallStartupTask();

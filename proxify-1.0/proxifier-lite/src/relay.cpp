@@ -1,5 +1,10 @@
 #include "relay.h"
 #include "http_proxy_client.h"
+#include "process_utils.h"
+#include "wifi_utils.h"
+#include "data_tracker.h"
+#include "network_watcher.h"
+
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #include <thread>
@@ -7,10 +12,20 @@
 #include <iostream>
 #include <string>
 #include <sstream>
+#include <chrono>
+#include <iomanip>
 
 namespace {
 
-void PumpOneDirection(SOCKET src, SOCKET dst) {
+static std::string GetCurrentTimestamp() {
+    auto now = std::chrono::system_clock::now();
+    auto in_time_t = std::chrono::system_clock::to_time_t(now);
+    std::stringstream ss;
+    ss << std::put_time(std::localtime(&in_time_t), "%Y-%m-%d %H:%M:%S");
+    return ss.str();
+}
+
+void PumpOneDirectionWithStats(SOCKET src, SOCKET dst, const std::string& processName, bool isTunneled) {
     char buf[65536]; // 64KB buffer for high throughput (~100 Mbps)
     for (;;) {
         int n = recv(src, buf, sizeof(buf), 0);
@@ -21,6 +36,7 @@ void PumpOneDirection(SOCKET src, SOCKET dst) {
             if (w <= 0) { shutdown(dst, SD_SEND); return; }
             sent += w;
         }
+        DataTracker::Instance().AddBytes(processName, n, isTunneled);
     }
     shutdown(dst, SD_SEND);
 }
@@ -151,6 +167,14 @@ void HandleConnection(SOCKET appSock, ConnTable* table, const Config* cfg, Stopp
         clientPort = ntohs(peer.sin_port);
     }
 
+    ProcessInfo procInfo = GetProcessInfoFromLocalPort(clientPort);
+
+    std::string netModeStr = "Ethernet";
+    if (GetActiveLinkType() == LinkType::WiFi) {
+        std::string ssid = GetActiveWifiSSID();
+        netModeStr = ssid.empty() ? "Wi-Fi" : ("Wi-Fi (" + ssid + ")");
+    }
+
     uint32_t origAddrNet = 0;
     uint16_t origPortNet = 0;
     bool foundInTable = false;
@@ -160,11 +184,13 @@ void HandleConnection(SOCKET appSock, ConnTable* table, const Config* cfg, Stopp
     }
 
     SOCKET upstream = INVALID_SOCKET;
+    std::string targetHost;
+    uint16_t targetPort = 80;
+    bool isTunneled = true;
 
     if (foundInTable) {
         // WinDivert NAT-redirected flow
-        uint16_t targetPortHost = ntohs(origPortNet);
-        std::string targetHost;
+        targetPort = ntohs(origPortNet);
         in_addr origInAddr{};
         origInAddr.s_addr = origAddrNet;
         char origIpStr[INET_ADDRSTRLEN];
@@ -184,11 +210,13 @@ void HandleConnection(SOCKET appSock, ConnTable* table, const Config* cfg, Stopp
         }
 
         if (cfg && ShouldBypassProxy(targetHost, cfg->bypassList)) {
-            upstream = ConnectDirectHost(targetHost, targetPortHost);
+            isTunneled = false;
+            upstream = ConnectDirectHost(targetHost, targetPort);
         } else {
+            isTunneled = true;
             upstream = HttpProxyConnectHost(cfg->proxyIp, cfg->proxyPort,
                                             cfg->proxyUser, cfg->proxyPass,
-                                            targetHost, targetPortHost);
+                                            targetHost, targetPort);
         }
     } else {
         // Direct local HTTP/CONNECT request (e.g. from System Proxy)
@@ -200,9 +228,6 @@ void HandleConnection(SOCKET appSock, ConnTable* table, const Config* cfg, Stopp
             std::istringstream iss(reqStr);
             std::string method, url, proto;
             iss >> method >> url >> proto;
-
-            std::string targetHost;
-            uint16_t targetPort = 80;
 
             if (method == "CONNECT") {
                 char dummyBuf[4096];
@@ -216,8 +241,10 @@ void HandleConnection(SOCKET appSock, ConnTable* table, const Config* cfg, Stopp
                 ParseHostPort(url, targetHost, targetPort, 443);
 
                 if (cfg && ShouldBypassProxy(targetHost, cfg->bypassList)) {
+                    isTunneled = false;
                     upstream = ConnectDirectHost(targetHost, targetPort);
                 } else {
+                    isTunneled = true;
                     upstream = HttpProxyConnectHost(cfg->proxyIp, cfg->proxyPort,
                                                     cfg->proxyUser, cfg->proxyPass,
                                                     targetHost, targetPort);
@@ -235,8 +262,10 @@ void HandleConnection(SOCKET appSock, ConnTable* table, const Config* cfg, Stopp
                     ParseHostPort(hostPart, targetHost, targetPort, 80);
 
                     if (cfg && ShouldBypassProxy(targetHost, cfg->bypassList)) {
+                        isTunneled = false;
                         upstream = ConnectDirectHost(targetHost, targetPort);
                     } else {
+                        isTunneled = true;
                         upstream = HttpProxyConnectHost(cfg->proxyIp, cfg->proxyPort,
                                                         cfg->proxyUser, cfg->proxyPass,
                                                         targetHost, targetPort);
@@ -253,11 +282,23 @@ void HandleConnection(SOCKET appSock, ConnTable* table, const Config* cfg, Stopp
         return;
     }
 
+    // Record Live Connection Log
+    ConnectionLogEntry logEntry;
+    logEntry.timestamp = GetCurrentTimestamp();
+    logEntry.processName = procInfo.name;
+    logEntry.pid = procInfo.pid;
+    logEntry.networkMode = netModeStr;
+    logEntry.targetHost = targetHost;
+    logEntry.targetPort = targetPort;
+    logEntry.proxyStatus = isTunneled ? ("TUNNELED (" + cfg->proxyIp + ":" + std::to_string(cfg->proxyPort) + ")") : "DIRECT";
+
+    DataTracker::Instance().RecordConnection(logEntry);
+
     // Enable TCP_NODELAY on upstream socket as well
     setsockopt(upstream, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&flag), sizeof(flag));
 
-    std::thread t1(PumpOneDirection, appSock, upstream);
-    std::thread t2(PumpOneDirection, upstream, appSock);
+    std::thread t1(PumpOneDirectionWithStats, appSock, upstream, procInfo.name, isTunneled);
+    std::thread t2(PumpOneDirectionWithStats, upstream, appSock, procInfo.name, isTunneled);
     t1.join();
     t2.join();
 

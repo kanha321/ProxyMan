@@ -41,9 +41,15 @@ add_executable(ProxyMan
     src/config.h
     src/http_proxy_client.cpp
     src/http_proxy_client.h
+    src/process_utils.cpp
+    src/process_utils.h
+    src/wifi_utils.cpp
+    src/wifi_utils.h
+    src/data_tracker.cpp
+    src/data_tracker.h
 )
 set_target_properties(ProxyMan PROPERTIES OUTPUT_NAME "ProxyMan")
-target_link_libraries(ProxyMan PRIVATE ws2_32 iphlpapi wininet "${WINDIVERT_DIR}/x64/WinDivert.lib")
+target_link_libraries(ProxyMan PRIVATE ws2_32 iphlpapi wininet wlanapi psapi "${WINDIVERT_DIR}/x64/WinDivert.lib")
 
 # Copy WinDivert driver files for ProxyMan execution
 add_custom_command(TARGET ProxyMan POST_BUILD
