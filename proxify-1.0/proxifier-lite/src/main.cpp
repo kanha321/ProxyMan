@@ -256,7 +256,7 @@ int main(int argc, char* argv[]) {
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
 
-    // Check for --help, --version, or --stop without requiring elevation first
+    // Check for CLI command flags first (no elevation or mutex needed for CLI info/management commands)
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "-h" || arg == "--help" || arg == "/?") {
@@ -278,6 +278,9 @@ int main(int argc, char* argv[]) {
                 ClearSystemProxy();
                 std::cout << "\x1b[33m[Main] No running ProxyMan instance found. Cleared system proxy.\x1b[0m\n";
             }
+            return 0;
+        } else if (arg == "--stats") {
+            DataTracker::Instance().PrintSummaryReport();
             return 0;
         }
     }
@@ -311,13 +314,10 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // Check command line flags for management & pool tools
+    // Check elevated CLI management commands
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
-        if (arg == "--stats") {
-            DataTracker::Instance().PrintSummaryReport();
-            return 0;
-        } else if (arg == "--install-startup") {
+        if (arg == "--install-startup") {
             InstallStartupTask();
             return 0;
         } else if (arg == "--uninstall-startup") {
@@ -341,7 +341,7 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // Ensure Singleton Instance using a Named Windows Mutex
+    // Ensure Singleton Instance: ONLY enforced when launching the proxy engine daemon
     HANDLE hMutex = CreateMutexW(NULL, FALSE, L"Local\\ProxyManSingletonMutex");
     if (hMutex == NULL || GetLastError() == ERROR_ALREADY_EXISTS) {
         std::cerr << "[Main] Another instance of ProxyMan is already running. Exiting.\n";
