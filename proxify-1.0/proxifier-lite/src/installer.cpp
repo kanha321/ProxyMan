@@ -317,11 +317,15 @@ int main(int argc, char* argv[]) {
         if (CreateProcessW(exeW.c_str(), NULL, NULL, NULL, FALSE, CREATE_NO_WINDOW | DETACHED_PROCESS, NULL, NULL, &si, &pi)) {
             CloseHandle(pi.hProcess);
             CloseHandle(pi.hThread);
-            std::cout << "\x1b[32m✔ ProxyMan engine started in background!\x1b[0m\n\n";
+            std::cout << "\x1b[32m✔ ProxyMan engine started successfully in background!\x1b[0m\n\n";
+            std::cout << "\x1b[1;33m💡 Note:\x1b[0m If any open application (browser, terminal, or IDE) stops responding,\n";
+            std::cout << "        simply restart that app to apply ProxyMan proxying.\n\n";
         } else {
             std::cout << "\x1b[31m❌ Failed to start ProxyMan background process.\x1b[0m\n\n";
         }
-        Sleep(1000);
+        std::cout << "Press Enter to exit...";
+        std::string dummy;
+        std::getline(std::cin, dummy);
     } else if (postChoice == 2) {
         std::cout << "\n[Installer] Initiating PC restart in 5 seconds...\n";
         _wsystem(L"shutdown /r /t 5 /c \"ProxyMan Setup completed. Restarting system...\"");
