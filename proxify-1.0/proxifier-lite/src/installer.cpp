@@ -291,6 +291,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Installed at: " << installedExe.string() << "\n\n";
 
     std::cout << "Press Enter to exit...";
-    std::cin.get();
+    std::string finishInput;
+    std::getline(std::cin, finishInput);
     return 0;
 }
