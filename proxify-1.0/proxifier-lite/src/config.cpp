@@ -197,59 +197,25 @@ bool SaveConfigToFile(const std::string& path, Config& config) {
 
 bool PromptAndSaveConfig(const std::string& path, Config& config) {
     std::cout << "==========================================================\n";
-    std::cout << "  ProxyMan First-Time TOML Configuration Setup\n";
+    std::cout << "  ProxyMan Initial Configuration Initialization\n";
     std::cout << "==========================================================\n";
-    std::cout << "No configuration found at: " << path << "\n\n";
+    std::cout << "[Config] No TOML configuration file found at: " << path << "\n";
 
-    std::string input;
-
-    // Proxy IP
-    std::cout << "Enter Proxy IP [default: 172.31.100.25]: ";
-    std::getline(std::cin, input);
-    input = Trim(input);
-    config.proxyIp = input.empty() ? "172.31.100.25" : input;
-
-    // Proxy Port
-    std::cout << "Enter Proxy Port [default: 3128]: ";
-    std::getline(std::cin, input);
-    input = Trim(input);
-    if (input.empty()) {
-        config.proxyPort = 3128;
-    } else {
-        try { config.proxyPort = static_cast<uint16_t>(std::stoi(input)); } catch (...) { config.proxyPort = 3128; }
-    }
-
-    // Username
-    std::cout << "Enter Username [default: edcguest]: ";
-    std::getline(std::cin, input);
-    input = Trim(input);
-    config.proxyUser = input.empty() ? "edcguest" : input;
-
-    // Password
-    std::cout << "Enter Password [default: edcguest]: ";
-    std::getline(std::cin, input);
-    input = Trim(input);
-    config.proxyPass = input.empty() ? "edcguest" : input;
-
-    // Relay Port
-    std::cout << "Enter Local Relay Port [default: 55555]: ";
-    std::getline(std::cin, input);
-    input = Trim(input);
-    if (input.empty()) {
-        config.relayPort = 55555;
-    } else {
-        try { config.relayPort = static_cast<uint16_t>(std::stoi(input)); } catch (...) { config.relayPort = 55555; }
-    }
-
+    config.proxyIp = "172.31.100.25";
+    config.proxyPort = 3128;
+    config.proxyUser = "edcguest";
+    config.proxyPass = "edcguest";
+    config.relayPort = 55555;
     config.proxyPool = GetDefaultProxyPool();
     config.bypassList = GetDefaultBypassList();
 
-    std::cout << "\n[Config] Saving TOML configuration to: " << path << std::endl;
     if (SaveConfigToFile(path, config)) {
-        std::cout << "[Config] TOML Configuration saved successfully!\n\n";
+        std::cout << "[Config] Applied MNNIT defaults (172.31.100.25:3128, edcguest).\n";
+        std::cout << "[Config] Saved TOML configuration to: " << path << "\n";
+        std::cout << "[Config] Tip: You can customize proxy credentials or pool anytime in config.toml\n\n";
         return true;
     } else {
-        std::cerr << "[Config] Failed to save configuration file.\n\n";
+        std::cerr << "[Config] Failed to save TOML configuration file.\n\n";
         return false;
     }
 }

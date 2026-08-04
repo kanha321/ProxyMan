@@ -131,8 +131,7 @@ static void DrawHeader() {
     std::cout << "│  ⚡  ProxyMan Self-Contained Setup & Installation Wizard    │\n";
     std::cout << "└─────────────────────────────────────────────────────────────┘\n";
     std::cout << "\x1b[0m";
-    std::cout << "\x1b[1;33m  💡 Tip:\x1b[0m Press \x1b[1;36m[ENTER]\x1b[0m to keep default settings for all steps.\n";
-    std::cout << "     Leave options on default unless you know what they do.\n\n";
+    std::cout << "\x1b[1;33m  💡 Tip:\x1b[0m Press \x1b[1;36m[ENTER]\x1b[0m for instant zero-configuration setup.\n\n";
 }
 
 int main(int argc, char* argv[]) {
@@ -157,7 +156,7 @@ int main(int argc, char* argv[]) {
     const char* programFiles = std::getenv("ProgramFiles");
     fs::path defaultInstallDir = programFiles ? fs::path(programFiles) / "ProxyMan" : fs::path("C:\\Program Files\\ProxyMan");
 
-    std::cout << "\x1b[1;32m[Step 1/4] Installation Directory\x1b[0m\n";
+    std::cout << "\x1b[1;32m[Step 1/3] Installation Directory\x1b[0m\n";
     std::cout << "Enter target folder [\x1b[1;33mdefault: " << defaultInstallDir.string() << "\x1b[0m]: ";
     std::string inputDir;
     std::getline(std::cin, inputDir);
@@ -173,32 +172,8 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // 2. Interactive Proxy Configuration
-    std::cout << "\x1b[1;32m[Step 2/4] Proxy Configuration\x1b[0m\n";
-    std::string proxyIp, proxyUser, proxyPass, input;
-    uint16_t proxyPort = 3128, relayPort = 55555;
-
-    std::cout << "  Proxy IP [\x1b[1;33mdefault: 172.31.100.25\x1b[0m]: ";
-    std::getline(std::cin, input);
-    proxyIp = Trim(input).empty() ? "172.31.100.25" : Trim(input);
-
-    std::cout << "  Proxy Port [\x1b[1;33mdefault: 3128\x1b[0m]: ";
-    std::getline(std::cin, input);
-    if (!Trim(input).empty()) { try { proxyPort = static_cast<uint16_t>(std::stoi(input)); } catch (...) {} }
-
-    std::cout << "  Username [\x1b[1;33mdefault: edcguest\x1b[0m]: ";
-    std::getline(std::cin, input);
-    proxyUser = Trim(input).empty() ? "edcguest" : Trim(input);
-
-    std::cout << "  Password [\x1b[1;33mdefault: edcguest\x1b[0m]: ";
-    std::getline(std::cin, input);
-    proxyPass = Trim(input).empty() ? "edcguest" : Trim(input);
-
-    std::cout << "  Local Relay Port [\x1b[1;33mdefault: 55555\x1b[0m]: ";
-    std::getline(std::cin, input);
-    if (!Trim(input).empty()) { try { relayPort = static_cast<uint16_t>(std::stoi(input)); } catch (...) {} }
-
-    // Write Config file to ~/.config/proxyman/config.toml
+    // 2. Write Pre-Configured MNNIT Settings (config.toml)
+    std::cout << "\x1b[1;32m[Step 2/3] Configuration Settings\x1b[0m\n";
     const char* userProfile = std::getenv("USERPROFILE");
     if (userProfile) {
         fs::path configDir = fs::path(userProfile) / ".config" / "proxyman";
@@ -208,12 +183,12 @@ int main(int argc, char* argv[]) {
         std::ofstream cfgFile(configFile);
         if (cfgFile.is_open()) {
             cfgFile << "# ProxyMan TOML Configuration File\n\n";
-            cfgFile << "relay_port = " << relayPort << "\n\n";
+            cfgFile << "relay_port = 55555\n\n";
             cfgFile << "[proxy]\n";
-            cfgFile << "ip = \"" << proxyIp << "\"\n";
-            cfgFile << "port = " << proxyPort << "\n";
-            cfgFile << "user = \"" << proxyUser << "\"\n";
-            cfgFile << "pass = \"" << proxyPass << "\"\n\n";
+            cfgFile << "ip = \"172.31.100.25\"\n";
+            cfgFile << "port = 3128\n";
+            cfgFile << "user = \"edcguest\"\n";
+            cfgFile << "pass = \"edcguest\"\n\n";
             cfgFile << "proxy_pool = [\n";
             cfgFile << "    \"172.31.100.25:3128\",\n";
             cfgFile << "    \"172.31.100.27:3128\",\n";
@@ -228,7 +203,9 @@ int main(int argc, char* argv[]) {
             cfgFile << "    \"localhost\",\n";
             cfgFile << "    \"mnnit.ac.in\"\n";
             cfgFile << "]\n";
-            std::cout << "\x1b[32m✔ TOML Configuration saved to: " << configFile.string() << "\x1b[0m\n\n";
+            std::cout << "\x1b[32m✔ Applied MNNIT defaults (172.31.100.25:3128, edcguest).\x1b[0m\n";
+            std::cout << "\x1b[32m✔ Configuration saved to: " << configFile.string() << "\x1b[0m\n";
+            std::cout << "\x1b[90m  ℹ Tip: You can customize your settings or EDC credentials anytime in config.toml\x1b[0m\n\n";
         }
     }
 
@@ -254,22 +231,21 @@ int main(int argc, char* argv[]) {
     }
     std::cout << "\n";
 
-    // 3. Add to System PATH Environment Variable
-    std::cout << "\x1b[1;32m[Step 3/4] System PATH Environment Variable\x1b[0m\n";
+    // 3. Add to System PATH & Select Startup Method
+    std::cout << "\x1b[1;32m[Step 3/3] System PATH & Autostart\x1b[0m\n";
     std::cout << "Add ProxyMan directory to System PATH? [\x1b[1;33mY/n, default: Y\x1b[0m]: ";
     std::string pathChoice;
     std::getline(std::cin, pathChoice);
     pathChoice = Trim(pathChoice);
     if (pathChoice.empty() || pathChoice == "Y" || pathChoice == "y" || pathChoice == "yes") {
         if (AddToPath(installDir)) {
-            std::cout << "\x1b[32m✔ Added ProxyMan directory to System PATH.\x1b[0m\n\n";
+            std::cout << "\x1b[32m✔ Added ProxyMan directory to System PATH.\x1b[0m\n";
         }
     } else {
-        std::cout << "Skipped PATH modification.\n\n";
+        std::cout << "Skipped PATH modification.\n";
     }
 
-    // 4. Select Startup Method
-    std::cout << "\x1b[1;32m[Step 4/4] Choose Startup Option\x1b[0m\n";
+    std::cout << "\nChoose Startup Option:\n";
     std::cout << "  \x1b[1;36m1)\x1b[0m Task Scheduler at Logon [\x1b[1;33mRECOMMENDED — Zero UAC Prompts, Starts at Logon\x1b[0m]\n";
     std::cout << "  \x1b[1;36m2)\x1b[0m Windows System Service [\x1b[1;33mZero UAC Prompts, Starts at PC Boot\x1b[0m]\n";
     std::cout << "  \x1b[1;36m3)\x1b[0m Skip Autostart (Manual Execution Only)\n";
