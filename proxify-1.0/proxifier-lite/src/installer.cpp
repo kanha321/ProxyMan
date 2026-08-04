@@ -211,13 +211,36 @@ int main(int argc, char* argv[]) {
         std::cout << "\x1b[32m✔ Configuration file created at:\x1b[0m\n";
         std::cout << "  \x1b[1;33m" << configFile.string() << "\x1b[0m\n\n";
 
-        std::cout << "\x1b[1;36m┌─ [ " << configFile.string() << " ] ────────┐\x1b[0m\n";
+        int maxLineLen = static_cast<int>(configFile.string().size()) + 8;
+        std::stringstream ssCheck(configContent);
+        std::string checkLine;
+        while (std::getline(ssCheck, checkLine)) {
+            if (static_cast<int>(checkLine.size()) + 4 > maxLineLen) {
+                maxLineLen = static_cast<int>(checkLine.size()) + 4;
+            }
+        }
+        if (maxLineLen < 65) maxLineLen = 65;
+
+        std::cout << "\x1b[1;36m┌── [ " << configFile.string() << " ] ";
+        int headerUsed = 7 + static_cast<int>(configFile.string().size());
+        int topDashCount = maxLineLen - headerUsed;
+        if (topDashCount < 2) topDashCount = 2;
+        for (int i = 0; i < topDashCount; ++i) std::cout << "─";
+        std::cout << "┐\x1b[0m\n";
+
         std::stringstream ss(configContent);
         std::string line;
         while (std::getline(ss, line)) {
-            std::cout << "\x1b[36m│\x1b[0m " << line << "\n";
+            std::cout << "\x1b[1;36m│\x1b[0m \x1b[37m" << line;
+            int pad = maxLineLen - 3 - static_cast<int>(line.size());
+            if (pad < 0) pad = 0;
+            for (int i = 0; i < pad; ++i) std::cout << " ";
+            std::cout << "\x1b[1;36m│\x1b[0m\n";
         }
-        std::cout << "\x1b[1;36m└──────────────────────────────────────────────────────────────┘\x1b[0m\n\n";
+
+        std::cout << "\x1b[1;36m└";
+        for (int i = 0; i < maxLineLen - 1; ++i) std::cout << "─";
+        std::cout << "┘\x1b[0m\n\n";
 
         std::cout << "\x1b[1;33m💡 Tip:\x1b[0m You can open and edit this \x1b[1;36mconfig.toml\x1b[0m file anytime in Notepad or VS Code\n";
         std::cout << "        to update your EDC credentials or add custom proxy IPs.\n\n";
