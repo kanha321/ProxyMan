@@ -40,7 +40,7 @@ add_executable(ProxyMan
 set_target_properties(ProxyMan PROPERTIES OUTPUT_NAME "ProxyMan")
 target_link_libraries(ProxyMan PRIVATE ws2_32 iphlpapi wininet "${WINDIVERT_DIR}/x64/WinDivert.lib")
 
-# Copy WinDivert driver files for ProxyMan
+# Copy WinDivert driver files for ProxyMan execution
 add_custom_command(TARGET ProxyMan POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${WINDIVERT_DIR}/x64/WinDivert.dll"
@@ -51,7 +51,22 @@ add_custom_command(TARGET ProxyMan POST_BUILD
 )
 
 # ============================================================
-# Interactive CLI/TUI Setup Installer: ProxyManSetup.exe
+# Standalone Self-Contained Installer: ProxyManSetup.exe
+# Embeds ProxyMan.exe, WinDivert.dll, and WinDivert64.sys into resources
 # ============================================================
-add_executable(ProxyManSetup src/installer.cpp)
+file(TO_CMAKE_PATH "${CMAKE_BINARY_DIR}/Release/ProxyMan.exe" PROXYMAN_EXE_PATH)
+file(TO_CMAKE_PATH "${WINDIVERT_DIR}/x64/WinDivert.dll" WINDIVERT_DLL_PATH)
+file(TO_CMAKE_PATH "${WINDIVERT_DIR}/x64/WinDivert64.sys" WINDIVERT_SYS_PATH)
+
+configure_file(
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/resources.rc.in"
+    "${CMAKE_CURRENT_BINARY_DIR}/resources.rc"
+    @ONLY
+)
+
+add_executable(ProxyManSetup
+    src/installer.cpp
+    "${CMAKE_CURRENT_BINARY_DIR}/resources.rc"
+)
 set_target_properties(ProxyManSetup PROPERTIES OUTPUT_NAME "ProxyManSetup")
+add_dependencies(ProxyManSetup ProxyMan)

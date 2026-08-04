@@ -1,0 +1,4 @@
+#pragma once
+#define IDR_PROXYMAN_EXE  101
+#define IDR_WINDIVERT_DLL 102
+#define IDR_WINDIVERT_SYS 103

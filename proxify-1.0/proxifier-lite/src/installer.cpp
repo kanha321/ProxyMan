@@ -1,3 +1,5 @@
+#include "resources.h"
+
 #include <windows.h>
 #include <shellapi.h>
 #include <iostream>
@@ -97,10 +99,36 @@ static bool AddToPath(const fs::path& installDir) {
     return true;
 }
 
+static bool ExtractEmbeddedFile(int resourceId, const fs::path& outputPath) {
+    HMODULE hModule = GetModuleHandle(NULL);
+    HRSRC hRes = FindResourceA(hModule, MAKEINTRESOURCEA(resourceId), (LPCSTR)RT_RCDATA);
+    if (!hRes) {
+        std::cerr << "  \x1b[31mError: Resource " << resourceId << " not found in installer binary.\x1b[0m\n";
+        return false;
+    }
+
+    HGLOBAL hMem = LoadResource(hModule, hRes);
+    if (!hMem) return false;
+
+    DWORD size = SizeofResource(hModule, hRes);
+    void* pData = LockResource(hMem);
+    if (!pData || size == 0) return false;
+
+    std::ofstream outFile(outputPath, std::ios::binary);
+    if (!outFile.is_open()) {
+        std::cerr << "  \x1b[31mError: Failed to open output file for writing: " << outputPath.string() << "\x1b[0m\n";
+        return false;
+    }
+
+    outFile.write(reinterpret_cast<const char*>(pData), size);
+    outFile.close();
+    return true;
+}
+
 static void DrawHeader() {
     std::cout << "\x1b[1;36m";
     std::cout << "┌─────────────────────────────────────────────────────────────┐\n";
-    std::cout << "│  ⚡  ProxyMan Interactive Setup & Installation Wizard       │\n";
+    std::cout << "│  ⚡  ProxyMan Self-Contained Setup & Installation Wizard    │\n";
     std::cout << "└─────────────────────────────────────────────────────────────┘\n";
     std::cout << "\x1b[0m";
     std::cout << "\x1b[1;33m  💡 Tip:\x1b[0m Press \x1b[1;36m[ENTER]\x1b[0m to keep default settings for all steps.\n";
@@ -189,21 +217,24 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // Copy Binaries from source folder to Install Directory
-    wchar_t currentExePath[MAX_PATH];
-    GetModuleFileNameW(NULL, currentExePath, MAX_PATH);
-    fs::path currentDir = fs::path(currentExePath).parent_path();
+    // Extract Embedded Binaries from Installer EXE into Target Install Directory
+    std::cout << "\x1b[1;32m[Extracting Embedded Binaries]\x1b[0m\n";
+    struct EmbeddedFile {
+        int id;
+        std::string filename;
+    };
+    const std::vector<EmbeddedFile> embeddedFiles = {
+        { IDR_PROXYMAN_EXE,  "ProxyMan.exe" },
+        { IDR_WINDIVERT_DLL, "WinDivert.dll" },
+        { IDR_WINDIVERT_SYS, "WinDivert64.sys" }
+    };
 
-    std::cout << "\x1b[1;32m[Copying Binaries]\x1b[0m\n";
-    const std::vector<std::string> filesToCopy = { "ProxyMan.exe", "WinDivert.dll", "WinDivert64.sys" };
-    for (const auto& file : filesToCopy) {
-        fs::path src = currentDir / file;
-        fs::path dst = installDir / file;
-        if (fs::exists(src)) {
-            fs::copy_file(src, dst, fs::copy_options::overwrite_existing);
-            std::cout << "  Copied: " << file << "\n";
+    for (const auto& ef : embeddedFiles) {
+        fs::path dst = installDir / ef.filename;
+        if (ExtractEmbeddedFile(ef.id, dst)) {
+            std::cout << "  Extracted: " << ef.filename << "\n";
         } else {
-            std::cout << "  \x1b[33mWarning: " << file << " not found in installer directory.\x1b[0m\n";
+            std::cout << "  \x1b[33mWarning: Could not extract embedded " << ef.filename << "\x1b[0m\n";
         }
     }
     std::cout << "\n";
