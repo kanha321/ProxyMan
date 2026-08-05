@@ -19,7 +19,7 @@ include_directories(
 # ============================================================
 # Production Binary: ProxyMan.exe
 # ============================================================
-add_executable(ProxyMan
+add_executable(ProxyMan WIN32
     src/main.cpp
     src/engine_controller.cpp
     src/engine_controller.h

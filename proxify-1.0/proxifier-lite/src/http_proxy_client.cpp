@@ -130,6 +130,11 @@ SOCKET HttpProxyConnectHost(const std::string& proxyIp, uint16_t proxyPort,
         return INVALID_SOCKET;
     }
 
+    // Reset socket timeouts to 0 (infinite) for long-lived streaming connections (e.g. Antigravity AI stream, WebSockets)
+    DWORD zeroTimeout = 0;
+    setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&zeroTimeout), sizeof(zeroTimeout));
+    setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&zeroTimeout), sizeof(zeroTimeout));
+
     return s;
 }
 

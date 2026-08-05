@@ -69,7 +69,7 @@ static bool RelaunchElevated(int argc, char* argv[]) {
     sei.lpVerb = L"runas";
     sei.lpFile = exePath;
     sei.lpParameters = args.c_str();
-    sei.nShow = SW_SHOWNORMAL;
+    sei.nShow = SW_HIDE; // Run headless with hidden window
 
     return ShellExecuteExW(&sei) != FALSE;
 }
@@ -380,7 +380,37 @@ static bool KillRunningProxyManProcesses() {
     return killedAny;
 }
 
-int main(int argc, char* argv[]) {
+#include <io.h>
+#include <fcntl.h>
+
+static void EnsureConsoleOutput() {
+    if (AttachConsole(ATTACH_PARENT_PROCESS)) {
+        FILE* fp = nullptr;
+        freopen_s(&fp, "CONOUT$", "w", stdout);
+        freopen_s(&fp, "CONOUT$", "w", stderr);
+        freopen_s(&fp, "CONIN$", "r", stdin);
+    } else {
+        HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+        if (hOut != NULL && hOut != INVALID_HANDLE_VALUE) {
+            int fd = _open_osfhandle(reinterpret_cast<intptr_t>(hOut), _O_TEXT);
+            if (fd != -1) {
+                FILE* fp = _fdopen(fd, "w");
+                if (fp) {
+                    *stdout = *fp;
+                    setvbuf(stdout, NULL, _IONBF, 0);
+                }
+            }
+        }
+    }
+    std::cout.clear();
+    std::cerr.clear();
+}
+
+static int real_main(int argc, char* argv[]) {
+    if (argc > 1) {
+        EnsureConsoleOutput();
+    }
+
     SetConsoleOutputCP(CP_UTF8);
     SetConsoleCP(CP_UTF8);
 
@@ -611,4 +641,32 @@ int main(int argc, char* argv[]) {
     WSACleanup();
     CloseHandle(hMutex);
     return 0;
+}
+
+int main(int argc, char* argv[]) {
+    return real_main(argc, argv);
+}
+
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+    int argc = 0;
+    LPWSTR* argvW = CommandLineToArgvW(GetCommandLineW(), &argc);
+    std::vector<std::string> argsStorage;
+    std::vector<char*> argvVec;
+
+    for (int i = 0; i < argc; ++i) {
+        int len = WideCharToMultiByte(CP_UTF8, 0, argvW[i], -1, NULL, 0, NULL, NULL);
+        if (len > 0) {
+            std::string s(len - 1, 0);
+            WideCharToMultiByte(CP_UTF8, 0, argvW[i], -1, &s[0], len, NULL, NULL);
+            argsStorage.push_back(s);
+        } else {
+            argsStorage.push_back("");
+        }
+    }
+    for (auto& s : argsStorage) {
+        argvVec.push_back(s.data());
+    }
+    if (argvW) LocalFree(argvW);
+
+    return real_main(static_cast<int>(argvVec.size()), argvVec.data());
 }
