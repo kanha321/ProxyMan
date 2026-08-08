@@ -81,3 +81,11 @@ add_executable(ProxyManSetup
 )
 set_target_properties(ProxyManSetup PROPERTIES OUTPUT_NAME "ProxyManSetup")
 add_dependencies(ProxyManSetup ProxyMan)
+
+# ============================================================
+# Complete System Uninstaller Utility: ProxyManUninstall.exe
+# ============================================================
+add_executable(ProxyManUninstall
+    src/uninstaller.cpp
+)
+set_target_properties(ProxyManUninstall PROPERTIES OUTPUT_NAME "ProxyManUninstall")
