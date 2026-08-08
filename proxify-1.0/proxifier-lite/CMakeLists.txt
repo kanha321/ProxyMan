@@ -62,10 +62,19 @@ add_custom_command(TARGET ProxyMan POST_BUILD
 )
 
 # ============================================================
+# Complete System Uninstaller Utility: ProxyManUninstall.exe
+# ============================================================
+add_executable(ProxyManUninstall
+    src/uninstaller.cpp
+)
+set_target_properties(ProxyManUninstall PROPERTIES OUTPUT_NAME "ProxyManUninstall")
+
+# ============================================================
 # Standalone Self-Contained Installer: ProxyManSetup.exe
-# Embeds ProxyMan.exe, WinDivert.dll, and WinDivert64.sys
+# Embeds ProxyMan.exe, ProxyManUninstall.exe, WinDivert.dll, WinDivert64.sys
 # ============================================================
 file(TO_CMAKE_PATH "${CMAKE_BINARY_DIR}/Release/ProxyMan.exe" PROXYMAN_EXE_PATH)
+file(TO_CMAKE_PATH "${CMAKE_BINARY_DIR}/Release/ProxyManUninstall.exe" PROXYMAN_UNINSTALL_EXE_PATH)
 file(TO_CMAKE_PATH "${WINDIVERT_DIR}/x64/WinDivert.dll" WINDIVERT_DLL_PATH)
 file(TO_CMAKE_PATH "${WINDIVERT_DIR}/x64/WinDivert64.sys" WINDIVERT_SYS_PATH)
 
@@ -80,12 +89,4 @@ add_executable(ProxyManSetup
     "${CMAKE_CURRENT_BINARY_DIR}/resources.rc"
 )
 set_target_properties(ProxyManSetup PROPERTIES OUTPUT_NAME "ProxyManSetup")
-add_dependencies(ProxyManSetup ProxyMan)
-
-# ============================================================
-# Complete System Uninstaller Utility: ProxyManUninstall.exe
-# ============================================================
-add_executable(ProxyManUninstall
-    src/uninstaller.cpp
-)
-set_target_properties(ProxyManUninstall PROPERTIES OUTPUT_NAME "ProxyManUninstall")
+add_dependencies(ProxyManSetup ProxyMan ProxyManUninstall)

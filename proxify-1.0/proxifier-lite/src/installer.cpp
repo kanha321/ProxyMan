@@ -253,9 +253,10 @@ int main(int argc, char* argv[]) {
         std::string filename;
     };
     const std::vector<EmbeddedFile> embeddedFiles = {
-        { IDR_PROXYMAN_EXE,  "ProxyMan.exe" },
-        { IDR_WINDIVERT_DLL, "WinDivert.dll" },
-        { IDR_WINDIVERT_SYS, "WinDivert64.sys" }
+        { IDR_PROXYMAN_EXE,   "ProxyMan.exe" },
+        { IDR_WINDIVERT_DLL,  "WinDivert.dll" },
+        { IDR_WINDIVERT_SYS,  "WinDivert64.sys" },
+        { IDR_UNINSTALL_EXE,  "ProxyManUninstall.exe" }
     };
 
     for (const auto& ef : embeddedFiles) {
