@@ -1,24 +1,14 @@
 # ===================================================================
-# ProxyMan Root .gitignore
-# Covers C++, Rust, CMake, Visual Studio, WinDivert SDK, & Credentials
+# ProxyMan .gitignore
+# Covers C++, CMake, Visual Studio, WinDivert SDK, & Credentials
 # ===================================================================
 
 # -------------------------------------------------------------------
 # Sensitive Configuration & Credentials (MUST BE IGNORED)
 # -------------------------------------------------------------------
-proxy-config.txt
-config.txt
-**/config.txt
 *.env
 *.secret
 *.key
-
-# -------------------------------------------------------------------
-# Rust Build Artifacts
-# -------------------------------------------------------------------
-/target/
-**/target/
-**/*.rs.bk
 
 # -------------------------------------------------------------------
 # C / C++ / CMake Build Folders & Intermediate Artifacts
@@ -62,8 +52,8 @@ Makefile
 *.obj
 *.o
 
-# Un-ignore vendored WinDivert SDK headers and libs
-!proxify-1.0/WinDivert-2.2.2-A/**
+# Un-ignore vendored WinDivert SDK
+!vendor/WinDivert/**
 
 # -------------------------------------------------------------------
 # Logs & Temporary Files
