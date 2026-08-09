@@ -13,10 +13,9 @@ proxify-win/
 │
 ├── CMakeLists.txt                ← Root build file (all 3 targets defined here)
 ├── .gitignore
+├── STRUCTURE.md                  ← This file
 │
 ├── docs/                         ← Documentation & design references
-│   ├── STRUCTURE.md              ← Project structure & contribution guide
-│   ├── AGENT.md                  ← AI Agent strict instructions & guidelines
 │   ├── architecture.md           ← Technical architecture overview
 │   └── prd.md                    ← Original product requirements document
 │
