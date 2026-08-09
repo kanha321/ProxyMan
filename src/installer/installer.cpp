@@ -2,6 +2,7 @@
 
 #include <windows.h>
 #include <shellapi.h>
+#include <tlhelp32.h>
 #include <iostream>
 #include <fstream>
 #include <sstream>
@@ -13,6 +14,49 @@
 namespace fs = std::filesystem;
 
 #pragma comment(lib, "shell32.lib")
+
+static bool StopRunningProxyMan() {
+    bool stopped = false;
+
+    // 1. Signal cross-process shutdown event
+    HANDLE hStopEvent = OpenEventW(EVENT_MODIFY_STATE, FALSE, L"Global\\ProxyManShutdownEvent");
+    if (hStopEvent != NULL) {
+        SetEvent(hStopEvent);
+        CloseHandle(hStopEvent);
+        stopped = true;
+    }
+
+    // 2. Stop ProxyMan service if running
+    _wsystem(L"sc.exe stop ProxyMan >NUL 2>&1");
+    _wsystem(L"net stop WinDivert >NUL 2>&1");
+
+    // 3. Terminate any running ProxyMan.exe processes
+    DWORD currentPid = GetCurrentProcessId();
+    HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (hSnap != INVALID_HANDLE_VALUE) {
+        PROCESSENTRY32W pe = { sizeof(pe) };
+        if (Process32FirstW(hSnap, &pe)) {
+            do {
+                if (_wcsicmp(pe.szExeFile, L"ProxyMan.exe") == 0 && pe.th32ProcessID != currentPid) {
+                    HANDLE hProc = OpenProcess(PROCESS_TERMINATE, FALSE, pe.th32ProcessID);
+                    if (hProc) {
+                        TerminateProcess(hProc, 0);
+                        CloseHandle(hProc);
+                        stopped = true;
+                    }
+                }
+            } while (Process32NextW(hSnap, &pe));
+        }
+        CloseHandle(hSnap);
+    }
+
+    if (stopped) {
+        std::cout << "\x1b[1;33m[Installer] Stopping active ProxyMan instance before setup/update...\x1b[0m\n";
+        std::cout << "\x1b[32m✔ Active ProxyMan processes and background engine stopped cleanly.\x1b[0m\n\n";
+        Sleep(500);
+    }
+    return stopped;
+}
 
 static void EnableANSI() {
     HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -152,6 +196,9 @@ int main(int argc, char* argv[]) {
     }
 
     DrawHeader();
+
+    // Stop active ProxyMan background processes/services if already running
+    StopRunningProxyMan();
 
     // 1. Determine Default Target Install Directory
     const char* programFiles = std::getenv("ProgramFiles");

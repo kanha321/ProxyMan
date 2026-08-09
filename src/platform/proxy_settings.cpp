@@ -92,19 +92,25 @@ bool SetSystemProxy(const std::string& proxyHostPort) {
 
     RegCloseKey(hKey);
 
-    // Also set HTTP_PROXY and HTTPS_PROXY environment variables for Go/Antigravity/Node/Python apps
+    // Also set HTTP_PROXY, HTTPS_PROXY, and NO_PROXY environment variables for Go/Antigravity/Node/Python apps
     std::string proxyUrl = "http://" + proxyHostPort;
     std::wstring wProxyUrl = StringToWString(proxyUrl);
+    const wchar_t* wNoProxy = L"localhost,127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,172.31.0.0/16,.mnnit.ac.in";
+    const char* noProxy = "localhost,127.0.0.1,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,172.31.0.0/16,.mnnit.ac.in";
 
     SetUserEnvVar(L"HTTP_PROXY", wProxyUrl.c_str());
     SetUserEnvVar(L"HTTPS_PROXY", wProxyUrl.c_str());
     SetUserEnvVar(L"http_proxy", wProxyUrl.c_str());
     SetUserEnvVar(L"https_proxy", wProxyUrl.c_str());
+    SetUserEnvVar(L"NO_PROXY", wNoProxy);
+    SetUserEnvVar(L"no_proxy", wNoProxy);
 
     SetEnvironmentVariableA("HTTP_PROXY", proxyUrl.c_str());
     SetEnvironmentVariableA("HTTPS_PROXY", proxyUrl.c_str());
     SetEnvironmentVariableA("http_proxy", proxyUrl.c_str());
     SetEnvironmentVariableA("https_proxy", proxyUrl.c_str());
+    SetEnvironmentVariableA("NO_PROXY", noProxy);
+    SetEnvironmentVariableA("no_proxy", noProxy);
 
     // Flush Windows DNS Resolver Cache to force apps to resolve DNS via ProxyMan Interceptor
     FlushWindowsDnsCache();
@@ -138,11 +144,15 @@ bool ClearSystemProxy() {
     SetUserEnvVar(L"HTTPS_PROXY", NULL);
     SetUserEnvVar(L"http_proxy", NULL);
     SetUserEnvVar(L"https_proxy", NULL);
+    SetUserEnvVar(L"NO_PROXY", NULL);
+    SetUserEnvVar(L"no_proxy", NULL);
 
     SetEnvironmentVariableA("HTTP_PROXY", NULL);
     SetEnvironmentVariableA("HTTPS_PROXY", NULL);
     SetEnvironmentVariableA("http_proxy", NULL);
     SetEnvironmentVariableA("https_proxy", NULL);
+    SetEnvironmentVariableA("NO_PROXY", NULL);
+    SetEnvironmentVariableA("no_proxy", NULL);
 
     // Flush Windows DNS Resolver Cache
     FlushWindowsDnsCache();

@@ -118,6 +118,17 @@ static bool MatchWildcard(const std::string& pattern, const std::string& str) {
 }
 
 static bool ShouldBypassProxy(const std::string& targetHostOrIp, const std::vector<std::string>& bypassList) {
+    // Check if targetHostOrIp is a private/local IP address
+    in_addr addr{};
+    if (inet_pton(AF_INET, targetHostOrIp.c_str(), &addr) == 1) {
+        uint32_t ip = ntohl(addr.s_addr);
+        uint8_t b1 = static_cast<uint8_t>((ip >> 24) & 0xFF);
+        uint8_t b2 = static_cast<uint8_t>((ip >> 16) & 0xFF);
+        if (b1 == 127 || b1 == 10 || (b1 == 172 && b2 >= 16 && b2 <= 31) || (b1 == 192 && b2 == 168) || (b1 == 169 && b2 == 254)) {
+            return true;
+        }
+    }
+
     for (const auto& entry : bypassList) {
         if (MatchWildcard(entry, targetHostOrIp)) return true;
     }

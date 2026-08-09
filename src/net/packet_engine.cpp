@@ -54,6 +54,19 @@ void RunPacketEngineCaptureOnly() {
     }
 }
 
+static bool IsPrivateIP(uint32_t ipNetOrder) {
+    uint32_t ip = ntohl(ipNetOrder);
+    uint8_t b1 = static_cast<uint8_t>((ip >> 24) & 0xFF);
+    uint8_t b2 = static_cast<uint8_t>((ip >> 16) & 0xFF);
+
+    if (b1 == 127) return true; // Loopback
+    if (b1 == 10) return true;  // 10.0.0.0/8 Private LAN
+    if (b1 == 172 && b2 >= 16 && b2 <= 31) return true; // 172.16.0.0/12 Private / Intranet LAN
+    if (b1 == 192 && b2 == 168) return true; // 192.168.0.0/16 Private LAN
+    if (b1 == 169 && b2 == 254) return true; // 169.254.0.0/16 Link-Local
+    return false;
+}
+
 void RunPacketEngine(ConnTable& table, const Config& cfg) {
     std::string filter = "tcp and ((outbound and !loopback) or (outbound and loopback and tcp.SrcPort == " + std::to_string(cfg.relayPort) + "))";
     HANDLE handle = WinDivertOpen(filter.c_str(), WINDIVERT_LAYER_NETWORK, 0, 0);
@@ -81,7 +94,13 @@ void RunPacketEngine(ConnTable& table, const Config& cfg) {
         bool isReturnLeg = (addr.Loopback && srcPort == cfg.relayPort);
         if (!isReturnLeg) {
             bool isTrafficToRealProxy = (ip->dstAddr == proxyAddrNet && tcp->dstPort == proxyPortNet);
+            bool isLocalLanOrPrivate = IsPrivateIP(ip->dstAddr);
             if (!isTrafficToRealProxy) {
+                if (isLocalLanOrPrivate) {
+                    // Let local LAN / intranet traffic pass through directly
+                    WinDivertSend(handle, packetBuf.get(), packetLen, nullptr, &addr);
+                    continue;
+                }
                 if (tcp->isSyn() && !tcp->isAck()) table.insert(srcPort, ip->dstAddr, tcp->dstPort);
                 uint32_t mappedAddr; uint16_t mappedPort;
                 if (table.lookup(srcPort, mappedAddr, mappedPort)) { ip->dstAddr = htonl(INADDR_LOOPBACK); tcp->dstPort = htons(cfg.relayPort); }
@@ -196,7 +215,13 @@ void StoppablePacketEngine::CaptureLoop(ConnTable* table, const Config* cfg) {
 
         if (!isReturnLeg) {
             bool isTrafficToRealProxy = (ip->dstAddr == proxyAddrNet && tcp->dstPort == proxyPortNet);
+            bool isLocalLanOrPrivate = IsPrivateIP(ip->dstAddr);
             if (!isTrafficToRealProxy) {
+                if (isLocalLanOrPrivate) {
+                    // Let local LAN / intranet traffic pass through directly
+                    WinDivertSend(handle, packetBuf.get(), packetLen, nullptr, &addr);
+                    continue;
+                }
                 if (tcp->isSyn() && !tcp->isAck()) {
                     table->insert(srcPort, ip->dstAddr, tcp->dstPort);
                 }
