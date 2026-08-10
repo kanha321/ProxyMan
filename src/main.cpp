@@ -109,42 +109,14 @@ static int real_main(int argc, char* argv[]) {
 
     EngineController controller;
 
-    // Detect initial network state
+    // Detect initial network state & start engine
     LinkType initialLink = GetActiveLinkType();
     std::printf("[Main] Initial network: %s\n", LinkTypeToString(initialLink).c_str());
+    controller.StartEngine(cfg, initialLink);
 
-    if (initialLink == LinkType::Ethernet) {
-        std::printf("[Main] Ethernet detected - starting engine and setting system proxy.\n");
-        std::string proxyStr = "127.0.0.1:" + std::to_string(cfg.relayPort);
-        SetSystemProxy(proxyStr);
-        controller.StartEngine(cfg);
-        ShowNotificationToast("⚡ ProxyMan", "Connected to MNNIT Ethernet (" + cfg.proxyIp + ":" + std::to_string(cfg.proxyPort) + ")");
-    } else {
-        std::printf("[Main] Not on Ethernet - engine idle, waiting for network change.\n");
-        ClearSystemProxy();
-        ShowNotificationToast("📶 ProxyMan", "Switched to Wi-Fi / Hotspot (Proxy Bypassed)");
-    }
-
-    // Watch for network changes
-    NetworkWatcher watcher([&controller, &cfg](LinkType newType) {
-        std::printf("[Main] Network changed -> %s\n", LinkTypeToString(newType).c_str());
-
-        if (newType == LinkType::Ethernet) {
-            if (!controller.IsRunning()) {
-                std::printf("[Main] Ethernet connected - starting engine and setting system proxy.\n");
-                std::string proxyStr = "127.0.0.1:" + std::to_string(cfg.relayPort);
-                SetSystemProxy(proxyStr);
-                controller.StartEngine(cfg);
-                ShowNotificationToast("⚡ ProxyMan", "Connected to MNNIT Ethernet (" + cfg.proxyIp + ":" + std::to_string(cfg.proxyPort) + ")");
-            }
-        } else {
-            if (controller.IsRunning()) {
-                std::printf("[Main] Ethernet disconnected - stopping engine and clearing system proxy.\n");
-                controller.StopEngine();
-                ClearSystemProxy();
-                ShowNotificationToast("📶 ProxyMan", "Switched to Wi-Fi / Hotspot (Proxy Bypassed)");
-            }
-        }
+    // Watch for network changes and update engine mode seamlessly
+    NetworkWatcher watcher([&controller](LinkType newType) {
+        controller.SetNetworkState(newType);
     });
 
     HANDLE hStopEvent = CreateGlobalShutdownEvent();

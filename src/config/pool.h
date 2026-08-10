@@ -10,4 +10,8 @@ struct ProxySelectionResult {
     bool found;
 };
 
-ProxySelectionResult SelectOptimalProxy(const Config& cfg);
+// Select optimal proxy with cached-first lookup and parallel pool racing
+ProxySelectionResult SelectOptimalProxy(const Config& cfg, bool forceRefresh = false);
+
+// Invalidate cached proxy choice (called on network changes or probe failures)
+void InvalidateCachedProxy();

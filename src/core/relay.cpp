@@ -220,7 +220,8 @@ void HandleConnection(SOCKET appSock, ConnTable* table, const Config* cfg, Stopp
             }
         }
 
-        if (cfg && ShouldBypassProxy(targetHost, cfg->bypassList)) {
+        bool isDirectPassthrough = (relay && relay->GetMode() == RelayMode::DirectPassthrough);
+        if (isDirectPassthrough || (cfg && ShouldBypassProxy(targetHost, cfg->bypassList))) {
             isTunneled = false;
             upstream = ConnectDirectHost(targetHost, targetPort);
         } else {
@@ -230,7 +231,7 @@ void HandleConnection(SOCKET appSock, ConnTable* table, const Config* cfg, Stopp
                                             targetHost, targetPort);
         }
     } else {
-        // Direct local HTTP/CONNECT request (e.g. from System Proxy)
+        // Direct local HTTP/CONNECT request (e.g. from System Proxy or env var HTTP_PROXY)
         char reqBuf[4096] = {0};
         int bytes = recv(appSock, reqBuf, sizeof(reqBuf) - 1, MSG_PEEK);
         if (bytes > 0) {
@@ -239,6 +240,8 @@ void HandleConnection(SOCKET appSock, ConnTable* table, const Config* cfg, Stopp
             std::istringstream iss(reqStr);
             std::string method, url, proto;
             iss >> method >> url >> proto;
+
+            bool isDirectPassthrough = (relay && relay->GetMode() == RelayMode::DirectPassthrough);
 
             if (method == "CONNECT") {
                 char dummyBuf[4096];
@@ -251,7 +254,7 @@ void HandleConnection(SOCKET appSock, ConnTable* table, const Config* cfg, Stopp
 
                 ParseHostPort(url, targetHost, targetPort, 443);
 
-                if (cfg && ShouldBypassProxy(targetHost, cfg->bypassList)) {
+                if (isDirectPassthrough || (cfg && ShouldBypassProxy(targetHost, cfg->bypassList))) {
                     isTunneled = false;
                     upstream = ConnectDirectHost(targetHost, targetPort);
                 } else {
@@ -272,7 +275,7 @@ void HandleConnection(SOCKET appSock, ConnTable* table, const Config* cfg, Stopp
                     std::string hostPart = (pathPos != std::string::npos) ? hostAndPath.substr(0, pathPos) : hostAndPath;
                     ParseHostPort(hostPart, targetHost, targetPort, 80);
 
-                    if (cfg && ShouldBypassProxy(targetHost, cfg->bypassList)) {
+                    if (isDirectPassthrough || (cfg && ShouldBypassProxy(targetHost, cfg->bypassList))) {
                         isTunneled = false;
                         upstream = ConnectDirectHost(targetHost, targetPort);
                     } else {
