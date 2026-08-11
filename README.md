@@ -4,14 +4,15 @@
 [![Platform](https://img.shields.io/badge/Platform-Windows--x64-0078D6.svg)](https://microsoft.com/windows)
 [![Kernel Interception](https://img.shields.io/badge/Engine-WinDivert%202.2.2-orange.svg)](https://reqrypt.org/windivert.html)
 
-**ProxyMan** is a zero-configuration, kernel-level transparent proxy engine for Windows. Designed specifically for institutional and campus networks (such as MNNIT EDC gateways), ProxyMan automatically intercepts outbound TCP traffic, injects proxy authentication headers, benchmarks proxy pool latencies, and auto-switches between proxy and direct modes when moving between Ethernet and Wi-Fi networks.
+**ProxyMan** is a zero-configuration, kernel-level transparent proxy engine for Windows. Designed specifically for institutional and campus networks (such as MNNIT EDC gateways), ProxyMan automatically intercepts outbound TCP traffic, injects proxy authentication headers, benchmarks proxy pool latencies, and auto-switches between proxy mode (on campus) and direct passthrough mode (off campus).
 
 ---
 
 ## ✨ Features
 
-- 📶 **Network-Aware Auto Switching**: Monitors physical network interface state in real-time. Automatically engages proxy mode on Ethernet and switches to direct mode on Wi-Fi/Hotspots.
-- 🚀 **Auto Proxy Pool Selection**: Benchmarks campus proxy gateways (`172.31.100.25`, `172.31.100.27`, `172.31.102.29`, `172.31.103.29`, `172.31.100.14`) on launch and selects the fastest online proxy (`~16 ms`).
+- 📶 **Reachability-Based Dual-Mode Auto Switching**: Evaluates campus network availability in real-time. Automatically switches between Proxy Mode (MNNIT Network) and Direct Passthrough Mode (Personal Wi-Fi/Hotspots) while keeping local listener `127.0.0.1:55555` persistently active so IDEs & background tools (Antigravity, VS Code, Node.js) never need to restart.
+- 🚀 **Functional Proxy Probing & Parallel Pool Racing**: Performs authentic HTTP `CONNECT` handshakes. Features single-host probe caching with parallel multi-server pool racing on cache miss.
+- ⚖️ **Anti-Flap Debouncing & 45s Background Heartbeat**: Engages Proxy Mode instantly on success and requires 2 consecutive failed probes before falling back to Direct Mode. Includes a periodic 45s background reachability heartbeat.
 - 🔒 **Kernel Layer 3/4 Interception**: Uses WinDivert to transparently tunnel applications that do not support proxy settings (raw Python scripts, gRPC binaries, Git CLI, etc.).
 - 🌐 **Intranet & Local LAN Bypass**: Automatically bypasses private IP subnets (`172.31.x.x`, `10.x.x.x`, `192.168.x.x`) for direct LAN server access (e.g., `http://172.31.100.110/`).
 - 🤖 **AI Extension & Token Streaming Optimization**: Resets socket timeouts (`SO_RCVTIMEO`) to infinite keep-alive after HTTP CONNECT handshakes to prevent drops on Server-Sent Events (SSE) and gRPC AI streams (Antigravity, Gemini, ChatGPT).
